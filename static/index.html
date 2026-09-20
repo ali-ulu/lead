@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>AI-ULU Lead Hunter</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="toast" class="toast"></div>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="mark">AI</span><div><b>AI-ULU</b><small>LEAD HUNTER</small></div></div>
+    <nav>
+      <button class="nav active" data-view="discover">Discover</button>
+      <button class="nav" data-view="pipeline">Pipeline</button>
+    </nav>
+    <div class="source-note">LIVE OPEN DATA<br><strong>OpenStreetMap + Overpass</strong><br><span>No API key required</span></div>
+  </aside>
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">GLOBAL LOCAL-BUSINESS INTELLIGENCE</p>
+        <h1>Find businesses with missing or weak web presence.</h1>
+        <p class="subhead">Choose any country, city or area and industry. Leads stay in your local database.</p>
+      </div>
+      <div class="status"><i></i> Ready</div>
+    </header>
+    <section id="discoverView">
+      <section class="search-panel">
+        <label>Country<input id="country" placeholder="Germany"></label>
+        <label>City / Area<input id="city" placeholder="Berlin"></label>
+        <label>Industry<select id="category"></select></label>
+        <label>Radius<select id="radius_km"><option value="10">10 km</option><option value="20" selected>20 km</option><option value="30">30 km</option><option value="50">50 km</option></select></label>
+        <button id="discover" class="primary"><span class="buttonText">Find live leads</span><span class="spinner"></span></button>
+      </section>
+      <div class="search-meta"><span id="areaLabel">Searches are live and can take a few seconds.</span><button id="export" class="text-btn">Export CSV ↗</button></div>
+    </section>
+    <section id="pipelineView" class="hidden">
+      <div class="pipeline-filter">
+        <div><p class="eyebrow">LOCAL PIPELINE</p><h2>Move leads from discovery to client.</h2></div>
+        <select id="pipeline_status">
+          <option value="">All stages</option>
+          <option value="new">New</option><option value="reviewed">Reviewed</option><option value="contacted">Contacted</option>
+          <option value="replied">Replied</option><option value="proposal">Proposal</option><option value="won">Won</option><option value="lost">Lost</option>
+        </select>
+      </div>
+    </section>
+    <section class="filters">
+      <button class="filter-chip active" data-filter="">All</button>
+      <button class="filter-chip" data-filter="missing">No website</button>
+      <button class="filter-chip" data-filter="weak">Weak website</button>
+      <label class="score-filter">Min score <input id="min_score" type="number" min="0" max="100" value="0"></label>
+      <button id="refresh" class="text-btn">Refresh</button>
+    </section>
+    <section class="metrics" id="metrics"></section>
+    <section class="workspace">
+      <div class="list-pane">
+        <div class="list-head"><div><h2>Opportunities</h2><small id="count"></small></div><span>Score = web gap + contactability</span></div>
+        <div id="emptyResults" class="empty-results hidden"><span>⌕</span><h3>No leads yet</h3><p>Run a live search above. Any city, any supported market.</p></div>
+        <div id="leads" class="lead-list"></div>
+      </div>
+      <aside id="detail" class="detail-pane empty">
+        <div class="empty-state"><span>◎</span><p>Select a lead to inspect its evidence and prepare outreach.</p></div>
+      </aside>
+    </section>
+    <footer>Open-data discovery. Website audit uses public pages only. Review outreach before sending and respect local marketing/privacy rules.</footer>
+  </main>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
