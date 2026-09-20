@@ -46,10 +46,10 @@ async function load(){
 }
 
 function websiteLabel(status){
-  if(status==='missing') return ['No website','missing'];
+  if(status==='missing') return ['No site found','missing'];
   if(status==='weak') return ['Weak','weak'];
   if(status==='healthy') return ['Healthy','healthy'];
-  return ['Unknown','unknown'];
+  return ['Not checked','unknown'];
 }
 
 function renderTable(){
@@ -69,7 +69,7 @@ function renderTable(){
   $('leads').innerHTML=leads.map(x=>{
     const [webText,webClass]=websiteLabel(x.website_status);
     const contacts=[x.phone?'Phone':'',x.email?'Email':'',x.social_url?'Social':''].filter(Boolean);
-    return `<tr data-id="${x.id}">
+    return `<tr data-id="${x.id}" tabindex="0" role="button" aria-label="Open ${esc(x.name)}">
       <td class="business-cell">
         <strong>${esc(x.name)}</strong>
         <span>${esc(x.city||'Unknown')}${x.country?`, ${esc(x.country)}`:''} · ${esc(labels[x.category]||x.category||'')}</span>
@@ -81,7 +81,7 @@ function renderTable(){
     </tr>`;
   }).join('');
 
-  document.querySelectorAll('#leads tr').forEach(row=>row.addEventListener('click',()=>openLead(Number(row.dataset.id))));
+  document.querySelectorAll('#leads tr').forEach(row=>{row.addEventListener('click',()=>openLead(Number(row.dataset.id)));row.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openLead(Number(row.dataset.id))}})});
 }
 
 async function discover(){
