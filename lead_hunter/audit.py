@@ -89,18 +89,30 @@ def _assert_public_host(url: str) -> None:
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
             raise ValueError("Local/private websites are not audited")
 
+class PublicRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urllib.parse.urljoin(req.full_url, newurl)
+        _assert_public_host(target)
+        return super().redirect_request(req, fp, code, msg, headers, target)
+
+
 def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
     url = normalize_url(url)
     _assert_public_host(url)
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml"})
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPSHandler(context=ssl.create_default_context()),
+        PublicRedirectHandler(),
+    )
     start = time.perf_counter()
     try:
-        with urllib.request.urlopen(req, timeout=timeout, context=ssl.create_default_context()) as resp:
+        with opener.open(req, timeout=timeout) as resp:
             raw = resp.read(1_800_000)
             body = raw.decode(resp.headers.get_content_charset() or "utf-8", errors="replace")
             elapsed = round((time.perf_counter() - start) * 1000)
             p = SignalParser(); p.feed(body)
             final = resp.geturl()
+            _assert_public_host(final)
             title_match = re.search(r"<title[^>]*>(.*?)</title>", body, flags=re.I | re.S)
             title = re.sub(r"\s+", " ", title_match.group(1)).strip() if title_match else ""
             years = [int(y) for y in re.findall(r"(?:©|copyright[^0-9]{0,15})(20\d{2})", body, flags=re.I)]
