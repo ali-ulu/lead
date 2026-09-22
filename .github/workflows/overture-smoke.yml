@@ -1,0 +1,30 @@
+name: Overture Places smoke
+
+on:
+  push:
+    paths:
+      - "lead_hunter/providers/overture.py"
+      - "scripts/overture_smoke.py"
+      - ".github/workflows/overture-smoke.yml"
+      - "pyproject.toml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leadscout-overture-smoke
+  cancel-in-progress: true
+
+jobs:
+  overture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e .
+      - run: python scripts/overture_smoke.py
