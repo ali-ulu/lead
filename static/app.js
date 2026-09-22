@@ -54,6 +54,7 @@ function filters(){
   if(websiteFilter) q.set("website_status",websiteFilter);
   if(socialOnly) q.set("has_social","1");
   const min=$("min_score").value; if(min && min!=="0") q.set("min_score",min);
+  const gap=$("min_gap")&&$("min_gap").value; if(gap && gap!=="0") q.set("min_opportunity_gap_score",gap);
   const stage=$("pipeline_status").value; if(stage) q.set("pipeline_status",stage);
   return q;
 }
@@ -151,6 +152,31 @@ function openDrawer(){ $("drawer").setAttribute("aria-hidden","false"); document
 function closeDrawer(){ $("drawer").setAttribute("aria-hidden","true"); document.body.style.overflow=""; currentLead=null; draftText=""; }
 async function openLead(id){ currentLead=await api("/api/leads/"+id); renderLead(currentLead); openDrawer(); }
 
+function visibilityScoreHtml(lead){
+  const values=[
+    ["SEO",lead.seo_score],
+    ["AEO",lead.aeo_score],
+    ["GEO",lead.geo_score],
+    ["AI",lead.ai_visibility_score],
+    ["GAP",lead.opportunity_gap_score],
+  ];
+  return '<div class="visibility-grid">'+values.map(([label,value])=>{
+    const shown=(value===null||value===undefined)?"—":String(value);
+    const cls=value===null||value===undefined?"na":(label==="GAP"?(value>=70?"hot":value>=45?"mid":"good"):(value>=70?"good":value>=45?"mid":"hot"));
+    return '<div class="visibility-card '+cls+'"><span>'+label+'</span><strong>'+shown+'</strong><small>/100</small></div>';
+  }).join("")+'</div>';
+}
+
+function visibilityReasonsHtml(lead){
+  const groups=lead.visibility_reasons||{};
+  const labels={seo:"SEO",aeo:"AEO",geo:"GEO",ai_visibility:"AI Visibility",opportunity_gap:"Opportunity Gap"};
+  return Object.keys(labels).map(key=>{
+    const items=Array.isArray(groups[key])?groups[key]:[];
+    if(!items.length)return "";
+    return '<div class="visibility-reason-group"><h5>'+labels[key]+'</h5>'+items.slice(0,8).map(x=>'<div class="reason">'+esc(x)+'</div>').join("")+'</div>';
+  }).join("");
+}
+
 function renderLead(lead){
   currentLead=lead;
   $("drawerTitle").textContent=lead.name;
@@ -173,6 +199,7 @@ function showTab(tab){
     n.innerHTML='<div class="tab-panel"><div class="detail-section"><h4>CONTACT & INTELLIGENCE</h4><div class="kv">'+
       '<span>Website</span><strong>'+esc(lead.website||"Not found")+'</strong><span>'+esc(tr("phone"))+'</span><strong>'+esc(lead.phone||tr("unknown"))+'</strong><span>'+esc(tr("email"))+'</span><strong>'+esc(lead.email||tr("unknown"))+'</strong>'+
       '<span>Verification</span><strong>'+esc(lead.verification_status||"unverified")+'</strong><span>Contactability</span><strong>'+esc(lead.contactability_score||0)+'/100</strong><span>Commercial</span><strong>'+esc(lead.commercial_score||0)+'/100</strong><span>Rating</span><strong>'+esc(lead.rating??"—")+'</strong><span>Reviews</span><strong>'+esc(lead.review_count??"—")+'</strong></div>'+
+      '<div class="detail-section visibility-section"><h4>DIGITAL VISIBILITY</h4>'+visibilityScoreHtml(lead)+'<p class="muted visibility-note">Readiness scores, not ranking or AI citation predictions.</p></div>'+
       '<div class="message-actions" style="margin-top:12px"><button id="verifyBtn" class="secondary-btn">'+esc(tr("verify"))+'</button><button id="reputationBtn" class="secondary-btn">Reputation</button>'+(lead.website?'<button id="enrichBtn" class="secondary-btn">'+esc(tr("enrich"))+'</button>':"")+'</div></div>'+
       '<div class="detail-section"><h4>PIPELINE</h4><div class="pipeline-row">'+["new","reviewed","contacted","replied","proposal","won","lost"].map(s=>'<button class="stage-btn '+(lead.pipeline_status===s?"active":"")+'" data-stage="'+s+'">'+s+'</button>').join("")+'</div></div>'+
       '<button id="dnc" class="danger-btn">Do not contact</button></div>';
@@ -183,7 +210,7 @@ function showTab(tab){
     $("dnc").addEventListener("click",()=>doNotContact(lead.id));
   }
   if(tab==="audit"){
-    n.innerHTML='<div class="tab-panel"><div class="audit-card"><strong>'+esc(lead.website||"No website")+'</strong><p class="muted">Lighthouse is used when installed; heuristic checks are always available.</p>'+(lead.website?'<button id="auditBtn" class="secondary-btn">'+esc(tr("audit"))+'</button>':"")+'<div id="auditResult"></div></div></div>';
+    n.innerHTML='<div class="tab-panel"><div class="audit-card"><strong>'+esc(lead.website||"No website")+'</strong><p class="muted">Lighthouse + structured content signals feed SEO, AEO, GEO and AI Visibility readiness.</p>'+(lead.website?'<button id="auditBtn" class="secondary-btn">'+esc(tr("audit"))+'</button>':"")+'<div id="auditResult"></div></div><div class="detail-section" style="margin-top:16px"><h4>VISIBILITY SCORECARD</h4>'+visibilityScoreHtml(lead)+visibilityReasonsHtml(lead)+'</div></div>';
     if($("auditBtn"))$("auditBtn").addEventListener("click",()=>auditLead(lead.id));
   }
   if(tab==="message"){
@@ -221,7 +248,7 @@ async function refreshCurrent(tab){ if(!currentLead)return; currentLead=await ap
 async function verifyLead(id){try{const d=await api("/api/v1/leads/"+id+"/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});currentLead=d.lead;await refreshCurrent("overview");toast(d.verified?"Verified":"Verification checked");}catch(e){toast(e.message,true);}}
 async function enrichLead(id){try{await api("/api/v1/leads/"+id+"/enrich",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});await refreshCurrent("overview");toast("Enriched");}catch(e){toast(e.message,true);}}
 async function enrichReputation(id){try{const d=await api("/api/v1/leads/"+id+"/reputation",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});currentLead=d.lead||currentLead;await refreshCurrent("overview");const r=d.reputation||{};toast(r.matched?("Rating "+String(r.rating??"—")+" · "+String(r.review_count??0)+" reviews"):(r.reason||"No reputation match"));}catch(e){toast(e.message,true);}}
-async function auditLead(id){try{const d=await api("/api/v1/leads/"+id+"/audit",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});currentLead=d.lead;renderLead(currentLead);document.querySelector('[data-tab="audit"]').click();const n=$("auditResult");if(n)n.innerHTML='<p>'+esc(d.audit.audit_engine||"heuristic")+' · perf '+esc(d.audit.performance_score||"—")+' · SEO '+esc(d.audit.seo_score||"—")+' · accessibility '+esc(d.audit.accessibility_score||"—")+'</p>';await loadLeads();}catch(e){toast(e.message,true);}}
+async function auditLead(id){try{const d=await api("/api/v1/leads/"+id+"/audit",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});currentLead=d.lead;renderLead(currentLead);document.querySelector('[data-tab="audit"]').click();const n=$("auditResult");if(n)n.innerHTML='<p>'+esc(d.audit.audit_engine||"heuristic")+' · perf '+esc(d.audit.performance_score??"—")+' · SEO '+esc(d.audit.seo_score??"—")+' · AEO '+esc(d.audit.aeo_score??"—")+' · GEO '+esc(d.audit.geo_score??"—")+' · AI '+esc(d.audit.ai_visibility_score??"—")+'</p>';await loadLeads();}catch(e){toast(e.message,true);}}
 async function setStage(id,status){try{const d=await api("/api/v1/leads/"+id+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status})});currentLead=d.lead;await refreshCurrent("overview");}catch(e){toast(e.message,true);}}
 async function doNotContact(id){if(!confirm("Mark do-not-contact?"))return;try{await api("/api/v1/leads/"+id+"/dnc",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});closeDrawer();await loadLeads();}catch(e){toast(e.message,true);}}
 async function draft(id,l){try{const d=await api("/api/v1/leads/"+id+"/message?lang="+encodeURIComponent(l));draftText=d.message||"";$("message").textContent=draftText;$("message").dir=(l==="ur"||l==="sd")?"rtl":"ltr";$("copyMessage").disabled=!draftText;}catch(e){toast(e.message,true);}}
@@ -251,6 +278,7 @@ function bind(){
   $("exportXlsx").addEventListener("click",()=>{if(currentSearchId)location.href="/api/export.xlsx?search_id="+encodeURIComponent(currentSearchId);});
   $("exportCsv").addEventListener("click",()=>{if(currentSearchId)location.href="/api/export.csv?search_id="+encodeURIComponent(currentSearchId);});
   $("min_score").addEventListener("change",loadLeads);
+  $("min_gap").addEventListener("change",loadLeads);
   $("pipeline_status").addEventListener("change",loadLeads);
   $("socialFilter").addEventListener("click",()=>{socialOnly=!socialOnly;$("socialFilter").classList.toggle("active",socialOnly);loadLeads();});
   document.querySelectorAll(".filter-chip[data-filter]").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".filter-chip[data-filter]").forEach(x=>x.classList.remove("active"));b.classList.add("active");websiteFilter=b.dataset.filter;loadLeads();}));
