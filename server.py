@@ -23,7 +23,7 @@ HOST = os.environ.get("LEAD_HUNTER_HOST", "127.0.0.1")
 PORT = int(os.environ.get("LEAD_HUNTER_PORT", "8787"))
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "Nishan/3.0"
+    server_version = "Nishan/3.1"
 
     def log_message(self, fmt, *args):
         print(f"[nishan] {self.address_string()} - {fmt % args}")
@@ -52,7 +52,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({
                 "ok": True,
                 "name": "Nishan",
-                "version": "3.0.0",
+                "version": "3.1.0",
                 "provider": "OpenStreetMap / Overpass",
                 "languages": ["en", "tr", "ur", "sd"],
             })
@@ -208,7 +208,7 @@ class Handler(BaseHTTPRequestHandler):
 def main(open_browser: bool = False):
     initialize()
     url = f"http://{HOST}:{PORT}"
-    print(f"Nishan v3 ready: {url}")
+    print(f"Nishan v3.1 ready: {url}")
     if open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
