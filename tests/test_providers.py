@@ -24,7 +24,7 @@ class ProviderTests(unittest.TestCase):
 
     def test_timed_out_tile_returns_empty_instead_of_killing_search(self):
         with patch(
-            "lead_hunter.providers.osm._fetch",
+            "lead_hunter.providers.osm._fetch_one",
             side_effect=RuntimeError("timeout"),
         ):
             rows = _fetch_tile_rows(
