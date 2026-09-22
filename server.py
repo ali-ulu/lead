@@ -16,8 +16,10 @@ from lead_hunter.crm import add_note, list_activities, set_engagement, set_follo
 from lead_hunter.db import clear_all, get_lead, get_search_run, initialize, list_leads
 from lead_hunter.exporters import csv_bytes, xlsx_bytes
 from lead_hunter.oauth_meta import (
-    disconnect, handle_callback, handle_webhook_payload, list_connections, meta_configured,
-    oauth_start_url, send_message,
+    disconnect, facebook_oauth_start_url, handle_callback, handle_facebook_callback,
+    handle_instagram_callback, handle_webhook_payload, instagram_oauth_start_url,
+    link_recipient, list_connections, messaging_eligibility, meta_configured,
+    oauth_start_url, send_message, verify_webhook_signature,
 )
 from lead_hunter.providers.osm import CATEGORY_FILTERS
 from lead_hunter.services import (
@@ -32,7 +34,7 @@ PORT = int(os.environ.get("LEADSCOUT_PORT", os.environ.get("LEAD_HUNTER_PORT", "
 API_TOKEN = os.environ.get("LEADSCOUT_API_TOKEN", "").strip()
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "LeadScout/5.0"
+    server_version = "LeadScout/5.1"
 
     def log_message(self, fmt, *args):
         print(f"[leadscout] {self.address_string()} - {fmt % args}")
@@ -60,11 +62,19 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length",str(len(body))); self.send_header("Cache-Control","no-store")
         self.end_headers(); self.wfile.write(body)
 
-    def _body_json(self):
+    def _body_bytes(self):
         try:
             length=int(self.headers.get("Content-Length","0"))
-            return json.loads(self.rfile.read(length).decode("utf-8")) if length>0 else {}
-        except Exception: return {}
+            return self.rfile.read(length) if length>0 else b""
+        except Exception:
+            return b""
+
+    @staticmethod
+    def _json_from_bytes(raw: bytes):
+        try:
+            return json.loads(raw.decode("utf-8")) if raw else {}
+        except Exception:
+            return {}
 
     @staticmethod
     def _query(parsed): return {k:v[0] for k,v in parse_qs(parsed.query).items() if v}
@@ -90,11 +100,14 @@ class Handler(BaseHTTPRequestHandler):
 
         if path in {"/api/health","/api/v1/health"}:
             return self._json({
-                "ok":True,"name":"LeadScout","version":"5.0.0",
+                "ok":True,"name":"LeadScout","version":"5.1.0",
                 "providers":["OpenStreetMap/Overpass","Overture Places"],
                 "languages":["en","tr","ur","sd","de"],"agent_api":"/api/v1",
                 "openapi":"/api/v1/openapi.json","mcp":"mcp_server.py",
-                "meta_oauth_configured":meta_configured(),
+                "meta_oauth_configured":{
+                    "facebook":meta_configured("facebook"),
+                    "instagram":meta_configured("instagram"),
+                },
             })
         if path in {"/api/categories","/api/v1/categories"}:
             return self._json({"items":sorted(CATEGORY_FILTERS.keys())})
@@ -121,17 +134,30 @@ class Handler(BaseHTTPRequestHandler):
             if q.get("hub.mode",[""])[0]=="subscribe" and verify and q.get("hub.verify_token",[""])[0]==verify:
                 return self._text(q.get("hub.challenge",[""])[0])
             return self._text("forbidden",403)
-        if path=="/api/v1/oauth/meta/start":
-            try: return self._redirect(oauth_start_url())
+        if path in {"/api/v1/oauth/meta/start","/api/v1/oauth/meta/facebook/start"}:
+            try: return self._redirect(facebook_oauth_start_url())
             except Exception as exc: return self._json({"error":str(exc)},400)
-        if path=="/api/v1/oauth/meta/callback":
+        if path=="/api/v1/oauth/meta/instagram/start":
+            try: return self._redirect(instagram_oauth_start_url())
+            except Exception as exc: return self._json({"error":str(exc)},400)
+
+        if path in {"/api/v1/oauth/meta/callback","/api/v1/oauth/meta/facebook/callback"}:
             q=parse_qs(parsed.query)
-            if q.get("error"): return self._redirect("/?meta=error")
+            if q.get("error"): return self._redirect("/?meta=facebook_error")
             try:
-                handle_callback(q.get("code",[""])[0],q.get("state",[""])[0])
-                return self._redirect("/?meta=connected")
+                handle_facebook_callback(q.get("code",[""])[0],q.get("state",[""])[0])
+                return self._redirect("/?meta=facebook_connected")
             except Exception:
-                return self._redirect("/?meta=error")
+                return self._redirect("/?meta=facebook_error")
+
+        if path=="/api/v1/oauth/meta/instagram/callback":
+            q=parse_qs(parsed.query)
+            if q.get("error"): return self._redirect("/?meta=instagram_error")
+            try:
+                handle_instagram_callback(q.get("code",[""])[0],q.get("state",[""])[0])
+                return self._redirect("/?meta=instagram_connected")
+            except Exception:
+                return self._redirect("/?meta=instagram_error")
         if path=="/api/v1/oauth/connections":
             return self._json({"items":list_connections()})
         if path.startswith("/api/v1/searches/"):
@@ -143,6 +169,11 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/v1/leads/") and path.endswith("/activities"):
             try: return self._json({"items":list_activities(self._lead_id(path,"/activities"))})
             except ValueError: return self._json({"error":"invalid id"},400)
+        if path.startswith("/api/v1/leads/") and path.endswith("/messaging-eligibility"):
+            try:
+                q=parse_qs(parsed.query); provider=q.get("provider",["instagram"])[0]
+                return self._json(messaging_eligibility(self._lead_id(path,"/messaging-eligibility"),provider))
+            except (ValueError,LookupError) as exc: return self._json({"error":str(exc)},400)
         if path.startswith("/api/v1/leads/") and path.endswith("/message"):
             try:
                 lead_id=self._lead_id(path,"/message"); lang=parse_qs(parsed.query).get("lang",["en"])[0]
@@ -158,12 +189,18 @@ class Handler(BaseHTTPRequestHandler):
         return self._serve_static(path)
 
     def do_POST(self):
-        parsed=urlparse(self.path); path=parsed.path; payload=self._body_json()
+        parsed=urlparse(self.path); path=parsed.path
+        raw_body=self._body_bytes()
+        payload=self._json_from_bytes(raw_body)
         if not self._authorized(path): return self._json({"error":"unauthorized"},401)
 
         if path=="/api/v1/webhooks/meta":
             try:
                 provider=parse_qs(parsed.query).get("provider",["facebook"])[0]
+                signature=self.headers.get("X-Hub-Signature-256","")
+                allow_unsigned=os.environ.get("LEADSCOUT_META_ALLOW_UNSIGNED_WEBHOOK","0")=="1"
+                if not allow_unsigned and not verify_webhook_signature(raw_body,signature,provider):
+                    return self._json({"error":"invalid webhook signature"},401)
                 return self._json(handle_webhook_payload(provider,payload))
             except Exception as exc:
                 return self._json({"error":str(exc)},400)
@@ -200,6 +237,15 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/v1/leads/") and path.endswith("/notes"):
             try: return self._json({"activity":add_note(self._lead_id(path,"/notes"),str(payload.get("note") or ""))})
             except (ValueError,LookupError) as exc: return self._json({"error":str(exc)},400)
+        if path.startswith("/api/v1/leads/") and path.endswith("/messaging-recipient"):
+            try:
+                return self._json(link_recipient(
+                    self._lead_id(path,"/messaging-recipient"),
+                    str(payload.get("provider") or ""),
+                    str(payload.get("recipient_id") or ""),
+                ))
+            except (ValueError,LookupError) as exc: return self._json({"error":str(exc)},400)
+
         if path.startswith("/api/v1/leads/") and path.endswith("/send"):
             try:
                 return self._json(send_message(
@@ -238,7 +284,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers(); self.wfile.write(body)
 
 def main(open_browser: bool=False):
-    initialize(); url=f"http://{HOST}:{PORT}"; print(f"LeadScout 5.0 ready: {url}")
+    initialize(); url=f"http://{HOST}:{PORT}"; print(f"LeadScout 5.1 ready: {url}")
     if open_browser: threading.Timer(0.8,lambda:webbrowser.open(url)).start()
     ThreadingHTTPServer((HOST,PORT),Handler).serve_forever()
 
