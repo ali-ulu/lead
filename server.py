@@ -23,10 +23,10 @@ HOST = os.environ.get("LEAD_HUNTER_HOST", "127.0.0.1")
 PORT = int(os.environ.get("LEAD_HUNTER_PORT", "8787"))
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AIULULeadHunter/1.0"
+    server_version = "Nishan/3.0"
 
     def log_message(self, fmt, *args):
-        print(f"[lead-hunter] {self.address_string()} - {fmt % args}")
+        print(f"[nishan] {self.address_string()} - {fmt % args}")
 
     def _json(self, payload, status=200):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -49,7 +49,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/health":
-            return self._json({"ok": True, "version": "1.0.0", "provider": "OpenStreetMap / Overpass"})
+            return self._json({
+                "ok": True,
+                "name": "Nishan",
+                "version": "3.0.0",
+                "provider": "OpenStreetMap / Overpass",
+                "languages": ["en", "tr", "ur", "sd"],
+            })
         if parsed.path == "/api/categories":
             return self._json({"items": sorted(CATEGORY_FILTERS.keys())})
         if parsed.path == "/api/leads":
@@ -69,7 +75,7 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 return self._json({"error": "invalid id"}, 400)
             lang = query.get("lang", ["en"])[0]
-            lang = lang if lang in {"en", "tr", "de"} else "en"
+            lang = lang if lang in {"en", "tr", "ur", "sd", "de"} else "en"
             lead = get_lead(lead_id)
             if not lead:
                 return self._json({"error": "not found"}, 404)
@@ -78,21 +84,30 @@ class Handler(BaseHTTPRequestHandler):
             query = {k: v[0] for k, v in parse_qs(parsed.query).items() if v}
             rows = list_leads(query)
             buf = io.StringIO()
-            fields = ["id","name","country","city","category","lead_score","website_status","website","phone","email","social_url","pipeline_status","source","source_id"]
+            fields = [
+                "id","name","country","city","category","lead_score","website_status",
+                "website","phone","email","social_links","pipeline_status","source","source_id"
+            ]
             writer = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")
-            writer.writeheader(); writer.writerows(rows)
+            writer.writeheader()
+            for row in rows:
+                item = dict(row)
+                item["social_links"] = json.dumps(item.get("social_links") or {}, ensure_ascii=False)
+                writer.writerow(item)
             body = buf.getvalue().encode("utf-8-sig")
             self.send_response(200)
             self.send_header("Content-Type", "text/csv; charset=utf-8")
-            self.send_header("Content-Disposition", 'attachment; filename="lead-hunter-export.csv"')
+            self.send_header("Content-Disposition", 'attachment; filename="nishan-leads.csv"')
             self.send_header("Content-Length", str(len(body)))
-            self.end_headers(); self.wfile.write(body)
+            self.end_headers()
+            self.wfile.write(body)
             return
         return self._serve_static(parsed.path)
 
     def do_POST(self):
         parsed = urlparse(self.path)
         payload = self._body_json()
+
         if parsed.path == "/api/discover":
             city = str(payload.get("city") or "").strip()
             country = str(payload.get("country") or "").strip()
@@ -103,9 +118,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "Unsupported industry."}, 400)
             try:
                 area = geocode_area(city, country)
-                radius_km = int(payload.get("radius_km") or 20)
-                radius_km = max(3, min(50, radius_km))
-                rows = search_around(area["lat"], area["lon"], radius_km, category, city=area["city"], country=area["country"])
+                radius_km = max(3, min(50, int(payload.get("radius_km") or 20)))
+                rows = search_around(
+                    area["lat"], area["lon"], radius_km, category,
+                    city=area["city"], country=area["country"]
+                )
                 ids = upsert_leads(rows)
                 return self._json({"ok": True, "count": len(rows), "ids": ids, "area": area})
             except Exception as exc:
@@ -122,7 +139,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "not found"}, 404)
             if not lead.get("website"):
                 return self._json({"error": "This lead has no website to audit."}, 400)
+
             result = audit_url(lead["website"])
+            existing_socials = lead.get("social_links") or {}
+            discovered_socials = result.get("social_links") or {}
+            merged_socials = {**existing_socials, **discovered_socials}
+            primary_social = lead.get("social_url")
+            if not primary_social and merged_socials:
+                primary_social = next(iter(merged_socials.values()))
+
             updates = {
                 "website_status": result.get("website_status", "weak"),
                 "performance_score": result.get("performance_score"),
@@ -131,6 +156,8 @@ class Handler(BaseHTTPRequestHandler):
                 "has_cta": result.get("has_cta"),
                 "has_booking": result.get("has_booking"),
                 "has_https": result.get("has_https"),
+                "social_links": merged_socials,
+                "social_url": primary_social,
             }
             lead = update_lead(lead_id, updates)
             return self._json({"lead": lead, "audit": result})
@@ -158,11 +185,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True})
 
         if parsed.path == "/api/clear":
-            clear_all(); return self._json({"ok": True})
+            clear_all()
+            return self._json({"ok": True})
         return self._json({"error": "not found"}, 404)
 
     def _serve_static(self, path):
-        if path == "/": path = "/index.html"
+        if path == "/":
+            path = "/index.html"
         candidate = (STATIC / path.lstrip("/")).resolve()
         if STATIC.resolve() not in candidate.parents and candidate != STATIC.resolve():
             return self.send_error(HTTPStatus.FORBIDDEN)
@@ -173,12 +202,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", mimetypes.guess_type(candidate.name)[0] or "application/octet-stream")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-cache")
-        self.end_headers(); self.wfile.write(body)
+        self.end_headers()
+        self.wfile.write(body)
 
 def main(open_browser: bool = False):
     initialize()
     url = f"http://{HOST}:{PORT}"
-    print(f"AI-ULU Lead Hunter ready: {url}")
+    print(f"Nishan v3 ready: {url}")
     if open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
