@@ -7,7 +7,7 @@ from typing import Any
 from .db import connect, get_lead, update_lead
 
 ENGAGEMENT = {"not_contacted","drafted","sent","delivered","replied","rejected","bounced","no_response"}
-ACTIVITY_KINDS = {"note","message","reply","status","follow_up","oauth","agent","audit","enrichment"}
+ACTIVITY_KINDS = {"note","message","reply","status","follow_up","oauth","agent","audit","enrichment","verification","reputation"}
 
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
