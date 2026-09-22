@@ -8,7 +8,7 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 
 from lead_hunter.agent import get_job, run_sales_job
-from lead_hunter.crm import add_note, list_activities, set_engagement, set_follow_up
+from lead_hunter.crm import add_note, list_activities, mark_stale_no_response, set_engagement, set_follow_up
 from lead_hunter.db import clear_all, get_lead, initialize
 from lead_hunter.exporters import csv_bytes, xlsx_bytes
 from lead_hunter.oauth_meta import (
@@ -124,6 +124,14 @@ def add_lead_note(lead_id:int,note:str) -> dict[str,Any]:
 @mcp.tool()
 def lead_activity_timeline(lead_id:int) -> dict[str,Any]:
     initialize(); return {"items":list_activities(int(lead_id))}
+
+@mcp.tool()
+def refresh_no_response_statuses(days:int=7) -> dict[str,Any]:
+    """Mark sent/delivered leads with no reply after N days as no_response."""
+    initialize(); require_permission("LEADSCOUT_MCP_ALLOW_WRITE","MCP CRM writes",default=True)
+    result=mark_stale_no_response(days)
+    audit_agent_action("refresh_no_response_statuses",metadata={"days":days,"updated_count":result["updated_count"]})
+    return result
 
 @mcp.tool()
 def meta_connections() -> dict[str,Any]:
