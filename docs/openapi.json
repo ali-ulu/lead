@@ -200,6 +200,50 @@
               "maximum": 100
             },
             "description": "Minimum Opportunity Gap score"
+          },
+          {
+            "name": "max_seo_score",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "description": "Maximum SEO readiness score; useful for finding weak SEO opportunities"
+          },
+          {
+            "name": "max_aeo_score",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "description": "Maximum AEO readiness score; useful for finding weak answer-readiness opportunities"
+          },
+          {
+            "name": "max_geo_score",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "description": "Maximum GEO readiness score; useful for finding weak generative-search readiness opportunities"
+          },
+          {
+            "name": "max_ai_visibility_score",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "description": "Maximum AI Visibility/AIO readiness score; useful for finding large digital gaps"
           }
         ],
         "responses": {
