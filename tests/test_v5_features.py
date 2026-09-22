@@ -20,6 +20,7 @@ from lead_hunter.oauth_meta import (
     facebook_oauth_start_url,
     instagram_oauth_start_url,
     messaging_eligibility,
+    send_message,
     verify_webhook_signature,
 )
 
@@ -134,6 +135,33 @@ class V5FeatureTests(unittest.TestCase):
         with patch.dict(os.environ,{"META_APP_SECRET":secret},clear=False):
             self.assertTrue(verify_webhook_signature(raw,sig,"facebook"))
             self.assertFalse(verify_webhook_signature(raw,"sha256=bad","facebook"))
+
+    def test_meta_send_records_sent_activity_without_live_network(self):
+        lead_id=self._lead()
+        db.update_lead(lead_id,{"messaging_ids":{"instagram":"IGSID-1"}})
+        connection={
+            "id":7,
+            "provider":"instagram",
+            "account_id":"17841400000000000",
+            "metadata":{"api_base":"instagram"},
+        }
+        with patch("lead_hunter.oauth_meta._connection",return_value=(connection,"token")), \
+             patch("lead_hunter.oauth_meta._request_json",return_value={"recipient_id":"IGSID-1","message_id":"mid.sent"}):
+            result=send_message(
+                lead_id=lead_id,
+                provider="instagram",
+                recipient_id=None,
+                text="Hello",
+                connection_id=7,
+            )
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["external_id"],"mid.sent")
+        lead=db.get_lead(lead_id)
+        self.assertEqual(lead["engagement_status"],"sent")
+        activities=list_activities(lead_id)
+        sent=next(x for x in activities if x.get("external_id")=="mid.sent")
+        self.assertEqual(sent["status"],"sent")
+        self.assertEqual(sent["channel"],"instagram")
 
     def test_messaging_eligibility_requires_real_recipient_id(self):
         lead_id=self._lead()
