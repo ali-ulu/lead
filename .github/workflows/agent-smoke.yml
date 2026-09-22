@@ -16,6 +16,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: leadscout-agent-smoke
+  cancel-in-progress: true
+
 jobs:
   mcp:
     runs-on: ubuntu-latest
