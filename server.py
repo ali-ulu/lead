@@ -12,7 +12,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from lead_hunter.agent import get_job, run_sales_job
-from lead_hunter.crm import add_note, list_activities, set_engagement, set_follow_up
+from lead_hunter.crm import add_note, list_activities, mark_stale_no_response, set_engagement, set_follow_up
 from lead_hunter.db import clear_all, get_lead, get_search_run, initialize, list_leads
 from lead_hunter.exporters import csv_bytes, xlsx_bytes
 from lead_hunter.oauth_meta import (
@@ -258,6 +258,12 @@ class Handler(BaseHTTPRequestHandler):
         if (path.startswith("/api/leads/") or path.startswith("/api/v1/leads/")) and path.endswith("/dnc"):
             try: return self._json(mark_do_not_contact(self._lead_id(path,"/dnc")))
             except Exception as exc: return self._json({"error":str(exc)},400)
+
+        if path=="/api/v1/crm/refresh-no-response":
+            try:
+                return self._json(mark_stale_no_response(int(payload.get("days") or 7)))
+            except Exception as exc:
+                return self._json({"error":str(exc)},400)
 
         if path=="/api/v1/agent/run":
             try: return self._json(run_sales_job(**payload))
