@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .audit import audit_url
-from .db import get_lead, list_leads, update_lead, upsert_leads
+from .db import get_lead, list_leads, record_search_run, update_lead, upsert_leads
 from .outreach import build_message
 from .providers.nominatim import geocode_area
 from .providers.osm import CATEGORY_FILTERS, search_around
@@ -46,10 +46,19 @@ def discover_businesses(
         limit=max_results,
     )
     ids = upsert_leads(rows)
+    search_id = record_search_run(
+        country=area["country"],
+        city=area["city"],
+        category=category,
+        radius_km=radius_km,
+        lead_ids=ids,
+    )
     return {
         "ok": True,
         "count": len(rows),
-        "ids": ids,
+        "search_id": search_id,
+        "ids": ids[:500],
+        "ids_truncated": len(ids) > 500,
         "area": area,
         "category": category,
         "radius_km": radius_km,
@@ -113,6 +122,7 @@ def mark_do_not_contact(lead_id: int) -> dict[str, Any]:
 
 def query_leads(
     *,
+    search_id: str = "",
     ids: list[int] | None = None,
     country: str = "",
     city: str = "",
@@ -123,6 +133,8 @@ def query_leads(
     has_social: bool = False,
 ) -> list[dict[str, Any]]:
     filters: dict[str, str] = {}
+    if search_id:
+        filters["search_id"] = search_id
     if ids:
         filters["ids"] = ",".join(str(int(i)) for i in ids)
     if country:
