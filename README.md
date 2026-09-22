@@ -1,20 +1,31 @@
-# AI-ULU Lead Hunter
+# Nishan
 
-A ready-to-use local application for finding businesses in any city whose web presence is missing or weak, auditing public websites, scoring opportunities, preparing outreach drafts, and tracking a lightweight sales pipeline.
+**Nishan** is a local-first global business-opportunity scout. Pick a country, city/area, industry and radius; Nishan finds local businesses, highlights missing or weak web presence, collects available contact/social channels, audits public websites and prepares human-reviewed outreach drafts.
 
-## What it does
+## V3 highlights
 
-- Searches live OpenStreetMap/Overpass data by **country + city/area + industry + radius**.
-- Works globally. It is not tied to Türkiye or to any single city.
-- Flags businesses with **no known website** immediately.
-- Audits public websites for HTTPS, mobile viewport, contact CTA, booking/reservation signals, response-time proxy, title/meta/H1 signals, and a few aging/accessibility hints.
-- Recalculates an explainable 0–100 lead score after an audit.
-- Keeps phone, email, social, website and map links together.
-- Generates human-review outreach drafts in **English, Turkish and German**.
-- Tracks pipeline stages: `new → reviewed → contacted → replied → proposal → won/lost`.
-- Exports the current lead set to CSV.
-- Stores everything locally in SQLite.
-- Requires **no API key, no n8n, no Apify, no paid CRM**.
+- New **red + white** product identity. No AI-ULU branding.
+- Global live discovery with OpenStreetMap / Overpass.
+- English, Turkish, **Urdu** and **Sindhi** interface support.
+- Automatic RTL layout for Urdu and Sindhi.
+- Outreach drafts in English, Turkish, Urdu and Sindhi.
+- Multi-social capture:
+  - Instagram
+  - Facebook
+  - LinkedIn
+  - X / Twitter
+  - YouTube
+  - TikTok
+  - Telegram
+  - WhatsApp
+- Social channels are collected both from OpenStreetMap contact tags and, when a website audit is run, from public links found on the business website.
+- Explainable 0–100 opportunity score.
+- Website audit for HTTPS, mobile viewport, contact CTA, booking signals, response-time proxy, basic SEO/accessibility signals.
+- Pipeline: `new → reviewed → contacted → replied → proposal → won/lost`.
+- Do-not-contact handling.
+- CSV export.
+- SQLite local persistence.
+- No API key, n8n, Apify or paid CRM required.
 
 ## Start
 
@@ -22,38 +33,64 @@ A ready-to-use local application for finding businesses in any city whose web pr
 Double-click `START_WINDOWS.bat`.
 
 ### macOS
-Double-click `START_MAC.command` (or run `./START_MAC.command`).
+Double-click `START_MAC.command`.
 
 ### Linux
-Run `./start.sh`.
+Run:
 
-The app opens automatically at `http://127.0.0.1:8787`.
+```bash
+./start.sh
+```
+
+Or directly:
+
+```bash
+python3 Nishan.py
+```
+
+Nishan opens at `http://127.0.0.1:8787`.
 
 ### Requirement
-Python 3.11+ only. There are no third-party Python packages to install.
+Python 3.11+ only. The core app has no third-party Python package dependency.
 
-## Use
+## Typical flow
 
-1. Enter a country (optional), city/area, industry and radius.
-2. Click **Find live leads**.
-3. Filter to **No website** or inspect website-bearing leads.
-4. Open a lead and click **Audit website** to classify weak sites and recalculate the score.
-5. Generate EN/TR/DE outreach text, copy it or open an email draft.
-6. Move the lead through the local pipeline and export CSV whenever needed.
+1. Choose a country (optional), city/area, industry and radius.
+2. Click **Find leads**.
+3. Filter by:
+   - no site found
+   - weak website
+   - social account available
+   - opportunity score
+   - pipeline stage
+4. Open a lead.
+5. Review contact information and discovered social channels.
+6. If a website exists, run **Website check**. This can also enrich social channels from the public site.
+7. Generate an EN/TR/UR/SD outreach draft.
+8. Copy the draft or open an email client.
+9. Move the lead through the pipeline.
+10. Export the working set to CSV when needed.
 
 ## Data & accuracy
 
-Discovery uses OpenStreetMap through public Overpass endpoints and location lookup through Nominatim. Coverage and contact fields vary by country and city. “No website” means no website was present in the open-data record, not proof that a website does not exist anywhere on the internet. Website audits are public-page heuristics; the performance score shown in-app is a response-time proxy, not a Google Lighthouse score.
+Discovery uses OpenStreetMap through public Overpass endpoints and location lookup through Nominatim. Coverage varies by country, city and category.
 
-The application does not auto-send messages. This is intentional: outreach stays human-reviewed, and the user remains responsible for local marketing, privacy, anti-spam and do-not-contact rules.
+**“No site found” means the currently reviewed data source did not provide an independent website. It is not proof that no website exists anywhere online.**
 
-## Privacy & security
+Social accounts have the same limitation: Nishan shows accounts found in the available source tags or public website links. Missing social data is unknown, not proof of absence.
 
-- SQLite data stays on the local machine.
+Website audit results are lightweight public-page heuristics. The performance score is a response-time proxy, not Google Lighthouse.
+
+## Privacy & safety
+
+- Lead data stays in local SQLite.
 - No analytics or telemetry are built in.
-- No secrets or API keys are required.
-- Website audit blocks localhost/private-network targets to avoid accidental local-network probing.
-- A lead can be marked **Do not contact**, which hides it from normal lists.
+- No secrets/API keys are required.
+- The website auditor blocks localhost and private-network targets, including redirects to private addresses.
+- Messages are never auto-sent.
+- Leads can be marked do-not-contact.
+
+The user remains responsible for applicable privacy, marketing and anti-spam law in the target market.
 
 ## Technical shape
 
@@ -61,9 +98,11 @@ The application does not auto-send messages. This is intentional: outreach stays
 - SQLite
 - OpenStreetMap / Overpass
 - Nominatim geocoding
-- Vanilla HTML/CSS/JS UI
-- Provider-neutral internal model so Overture/Google/other enrichment can be added without rewriting the product
+- Vanilla HTML/CSS/JS
+- Provider-neutral data model
+- Safe public-website audit
+- GitHub Actions CI
 
-## License / data note
+## Open-data note
 
-OpenStreetMap data is subject to the Open Database License (ODbL) and public service usage policies. For high-volume or commercial-scale querying, operate your own compliant data pipeline or provider rather than hammering public community endpoints.
+OpenStreetMap data is subject to the Open Database License (ODbL) and public service usage policies. Public Overpass/Nominatim instances are shared infrastructure; use them responsibly. For high-volume production use, run or purchase a compliant data service instead of overloading community endpoints.
