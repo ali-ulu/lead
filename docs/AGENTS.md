@@ -1,175 +1,108 @@
-# LeadScout Agent Integration
+# LeadScout 5.1 — Agent Integration
 
-LeadScout can be driven by agents in two ways:
+LeadScout has two agent surfaces:
 
-1. **REST / OpenAPI** for any agent or automation platform that can call HTTP.
-2. **MCP** for hosts that support Model Context Protocol.
+1. REST/OpenAPI
+2. MCP via stdio or Streamable HTTP
 
-## REST API
+## REST
 
-Start the normal app:
-
-```bash
-python3 LeadScout.py
-```
-
-Base URL:
+Base:
 
 ```text
 http://127.0.0.1:8787/api/v1
 ```
 
-OpenAPI document:
+OpenAPI:
 
 ```text
 http://127.0.0.1:8787/api/v1/openapi.json
 ```
 
-Optional local API token:
-
-```bash
-export LEADSCOUT_API_TOKEN="change-me"
-python3 LeadScout.py
-```
-
-When set, requests to `/api/v1/*` require:
-
-```http
-Authorization: Bearer change-me
-```
-
-### Typical REST agent flow
-
-Search Karachi restaurants:
-
-```bash
-curl -X POST http://127.0.0.1:8787/api/v1/search \
-  -H "Content-Type: application/json" \
-  -d '{"country":"Pakistan","city":"Karachi","category":"restaurant","radius_km":20}'
-```
-
-The response includes a `search_id` for the complete stored result set. No application-level result cap is applied unless `max_results` is explicitly sent. A short `ids` compatibility preview may also be present, but agents should use `search_id` for large searches.
-
-Read those leads:
-
-```text
-GET /api/v1/leads?ids=12,13,14
-```
-
-Audit one website:
-
-```text
-POST /api/v1/leads/12/audit
-```
-
-Draft outreach:
-
-```text
-GET /api/v1/leads/12/message?lang=ur
-```
-
-Move pipeline:
-
-```http
-POST /api/v1/leads/12/status
-Content-Type: application/json
-
-{"status":"contacted"}
-```
-
-Download Excel:
-
-```text
-GET /api/v1/export.xlsx?ids=12,13,14
-```
+Set `LEADSCOUT_API_TOKEN` to require Bearer auth on protected v1 endpoints.
 
 ## MCP
 
-LeadScout uses the official MCP Python SDK v2 line.
-
-Install the optional agent dependency:
+Install:
 
 ```bash
-python -m pip install "mcp>=2,<3"
+python -m pip install -e ".[agents]"
 ```
 
-### Local stdio
+stdio:
 
 ```bash
 python mcp_server.py
 ```
 
-The MCP host launches this process and communicates over stdio.
-
-Example host configuration shape:
-
-```json
-{
-  "mcpServers": {
-    "leadscout": {
-      "command": "python",
-      "args": ["/absolute/path/to/lead/mcp_server.py"]
-    }
-  }
-}
-```
-
-### Streamable HTTP
+Streamable HTTP:
 
 ```bash
 python mcp_server.py --transport streamable-http --host 127.0.0.1 --port 8790
 ```
 
-Endpoint:
+Endpoint: `http://127.0.0.1:8790/mcp`
 
-```text
-http://127.0.0.1:8790/mcp
-```
+## Agent workflow
 
-## MCP tools
+The high-level autonomous workflow is:
 
+1. multi-source discovery
+2. dedupe
+3. cross-source verification
+4. contact/social enrichment
+5. website audit
+6. intelligence scoring
+7. outreach draft
+8. CRM activity
+9. Excel export
+
+Example intent:
+
+> Find Karachi restaurants, verify the strongest opportunities, enrich their contact channels, audit existing websites, prepare Urdu drafts for the best 30 leads, and export Excel.
+
+## Tool groups
+
+Discovery/read:
 - `capabilities`
 - `search_businesses`
 - `list_leads`
 - `get_lead_detail`
+- `verify_business`
+- `enrich_contacts`
 - `audit_website`
+- `lead_activity_timeline`
+- `meta_connections`
+- messaging eligibility inspection
+- `get_agent_job`
+
+Workflow/write:
 - `draft_outreach_message`
 - `update_pipeline_stage`
+- `update_engagement_status`
+- `schedule_follow_up`
+- `add_lead_note`
 - `do_not_contact`
 - `export_leads`
-- `clear_local_data`
+- `run_sales_agent`
 
-### Example autonomous flow
+## Security
 
-An agent can:
+Risky agent actions are separately permission-gated. Sending, destructive clearing and other writes can be disabled independently. Agent actions are recorded in the local audit log.
 
-1. call `search_businesses(city="Karachi", country="Pakistan", category="beauty", radius_km=20)`
-2. receive the search's `search_id`
-3. call `list_leads(search_id="...", min_score=50, page_size=100)`
-4. inspect the strongest leads
-5. call `audit_website(lead_id=...)` for leads that have websites
-6. call `draft_outreach_message(lead_id=..., lang="ur")`
-7. call `update_pipeline_stage(..., status="reviewed")`
-8. export the working set with `export_leads(format="xlsx", search_id="...")`
+Website audit/enrichment blocks private/local network targets.
 
-The MCP list tool is paginated to keep individual model/tool responses manageable. Pagination does **not** cap discovery or the number of leads stored.
+## Meta messaging
 
-## Safety defaults
+Facebook and Instagram OAuth are separate.
 
-- The app binds to localhost by default.
-- REST bearer auth is optional but recommended if exposing the REST server beyond a trusted local machine.
-- MCP Streamable HTTP binds to localhost by default.
-- Website audit blocks localhost/private-network targets and private redirects.
-- Outreach is drafted only. LeadScout does not auto-send messages.
-- Do-not-contact state is honored by normal lead lists.
+Social handles found during research are discovery data, not message recipient IDs. Sending requires:
 
-## Large searches
+- a connected Page/professional account,
+- applicable platform permissions,
+- an API-eligible recipient/conversation ID,
+- LeadScout send permission enabled.
 
-LeadScout stores the membership of each discovery run in `search_runs` / `search_run_leads`. This avoids giant query strings when a dense city/category returns thousands of businesses.
+Incoming reply/delivery events can update the CRM timeline when stored recipient or external message IDs match.
 
-Use:
-
-- REST: `?search_id=<id>`
-- MCP: `search_id="..."`
-
-The legacy `ids` filter remains for compatibility with old local history, but `search_id` is the preferred agent interface.
+Autonomous sending is not implicitly enabled.
