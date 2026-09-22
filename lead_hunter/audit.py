@@ -14,6 +14,9 @@ import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
+from datetime import datetime, timezone
+
+from .visibility import calculate_visibility
 
 USER_AGENT = "Mozilla/5.0 (compatible; LeadScout/5.0; local website audit)"
 
@@ -43,17 +46,41 @@ class SignalParser(HTMLParser):
         self.images = 0
         self.alt_images = 0
         self.social_links: dict[str, str] = {}
+        self.canonical = ""
+        self.robots_noindex = False
+        self.meta_author = False
+        self.h2 = 0
+        self.h3 = 0
+        self.semantic_main = False
+        self.hrefs: list[str] = []
+        self.heading_texts: list[str] = []
+        self.text_parts: list[str] = []
+        self.jsonld_blocks: list[str] = []
+        self.time_values: list[str] = []
+        self._jsonld = False
+        self._jsonld_buffer: list[str] = []
+        self._heading_tag = ""
+        self._heading_buffer: list[str] = []
 
     def handle_starttag(self, tag, attrs):
         tag = tag.lower()
         d = {k.lower(): (v or "") for k, v in attrs}
         if tag == "meta":
-            if d.get("name", "").lower() == "viewport":
+            name = d.get("name", "").lower()
+            if name == "viewport":
                 self.viewport = True
-            if d.get("name", "").lower() == "description" and d.get("content", "").strip():
+            if name == "description" and d.get("content", "").strip():
                 self.meta_description = True
+            if name in {"robots", "googlebot"} and "noindex" in d.get("content", "").lower():
+                self.robots_noindex = True
+            if name == "author" and d.get("content", "").strip():
+                self.meta_author = True
         if tag == "a":
             raw_href = d.get("href", "").strip()
+            if raw_href:
+                self.hrefs.append(raw_href)
+            if "author" in d.get("rel", "").lower():
+                self.meta_author = True
             href = raw_href.lower()
             textish = " ".join(d.values()).lower()
             self.tel = self.tel or href.startswith("tel:")
@@ -68,14 +95,86 @@ class SignalParser(HTMLParser):
             self.forms += 1
         if tag == "h1":
             self.h1 += 1
-        if tag == "link" and "stylesheet" in d.get("rel", "").lower():
-            self.stylesheets += 1
-        if tag == "script" and d.get("src"):
-            self.scripts += 1
+        if tag == "h2":
+            self.h2 += 1
+        if tag == "h3":
+            self.h3 += 1
+        if tag in {"h1","h2","h3","h4"}:
+            self._heading_tag = tag
+            self._heading_buffer = []
+        if tag in {"main","article"}:
+            self.semantic_main = True
+        if tag == "time" and d.get("datetime"):
+            self.time_values.append(d.get("datetime", ""))
+        if tag == "link":
+            rel = d.get("rel", "").lower()
+            if "stylesheet" in rel:
+                self.stylesheets += 1
+            if "canonical" in rel and d.get("href"):
+                self.canonical = d.get("href", "").strip()
+        if tag == "script":
+            if d.get("src"):
+                self.scripts += 1
+            if "application/ld+json" in d.get("type", "").lower():
+                self._jsonld = True
+                self._jsonld_buffer = []
         if tag == "img":
             self.images += 1
             if d.get("alt", "").strip():
                 self.alt_images += 1
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+        if self._jsonld and tag == "script":
+            block = "".join(self._jsonld_buffer).strip()
+            if block:
+                self.jsonld_blocks.append(block)
+            self._jsonld = False
+            self._jsonld_buffer = []
+        if self._heading_tag and tag == self._heading_tag:
+            text = re.sub(r"\\s+", " ", " ".join(self._heading_buffer)).strip()
+            if text:
+                self.heading_texts.append(text)
+            self._heading_tag = ""
+            self._heading_buffer = []
+
+    def handle_data(self, data):
+        text = re.sub(r"\\s+", " ", data or "").strip()
+        if not text:
+            return
+        if self._jsonld:
+            self._jsonld_buffer.append(data)
+            return
+        self.text_parts.append(text)
+        if self._heading_tag:
+            self._heading_buffer.append(text)
+
+def _walk_jsonld(value: Any, types: set[str], fields: set[str]) -> None:
+    if isinstance(value, list):
+        for item in value:
+            _walk_jsonld(item, types, fields)
+        return
+    if not isinstance(value, dict):
+        return
+    raw_type = value.get("@type")
+    if isinstance(raw_type, str):
+        types.add(raw_type)
+    elif isinstance(raw_type, list):
+        types.update(str(x) for x in raw_type)
+    fields.update(str(k) for k, v in value.items() if v not in (None, "", [], {}))
+    for child in value.values():
+        if isinstance(child, (dict, list)):
+            _walk_jsonld(child, types, fields)
+
+def _structured_data(blocks: list[str]) -> tuple[list[str], list[str]]:
+    types: set[str] = set()
+    fields: set[str] = set()
+    for block in blocks:
+        try:
+            _walk_jsonld(json.loads(block), types, fields)
+        except Exception:
+            continue
+    return sorted(types), sorted(fields)
 
 def normalize_url(url: str) -> str:
     url = (url or "").strip()
