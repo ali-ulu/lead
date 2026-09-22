@@ -33,3 +33,19 @@ CREATE TABLE IF NOT EXISTS leads (
 CREATE INDEX IF NOT EXISTS idx_leads_market ON leads(country, city, category);
 CREATE INDEX IF NOT EXISTS idx_leads_score ON leads(lead_score DESC);
 CREATE INDEX IF NOT EXISTS idx_leads_pipeline ON leads(pipeline_status);
+
+CREATE TABLE IF NOT EXISTS search_runs (
+    id TEXT PRIMARY KEY,
+    country TEXT,
+    city TEXT,
+    category TEXT,
+    radius_km INTEGER,
+    result_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS search_run_leads (
+    search_id TEXT NOT NULL,
+    lead_id INTEGER NOT NULL,
+    PRIMARY KEY(search_id, lead_id)
+);
+CREATE INDEX IF NOT EXISTS idx_search_run_leads_search ON search_run_leads(search_id);
