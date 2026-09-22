@@ -7,7 +7,10 @@ on:
       - ".github/workflows/live-fast.yml"
       - "lead_hunter/providers/osm.py"
       - "lead_hunter/providers/nominatim.py"
+      - "lead_hunter/providers/overture.py"
+      - "lead_hunter/merge.py"
       - "lead_hunter/services.py"
+      - "pyproject.toml"
 
 permissions:
   contents: read
