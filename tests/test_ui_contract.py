@@ -13,7 +13,7 @@ class UIContractTests(unittest.TestCase):
         html_ids = set(re.findall(r'\bid=["\']([^"\']+)["\']', html))
         js_ids = set(re.findall(r"\$\(['\"]([^'\"]+)['\"]\)", js))
 
-        dynamic_ids = {"auditBtn", "copyMessage", "dnc", "message", "openEmail", "tabContent", "auditResult", "activityList", "engagementStatus", "enrichBtn", "followUpAt", "leadNote", "metaProvider", "metaRecipient", "metaEligibility", "saveEngagement", "saveFollow", "saveNote", "sendMetaBtn", "verifyBtn"}
+        dynamic_ids = {"auditBtn", "copyMessage", "dnc", "message", "openEmail", "tabContent", "auditResult", "activityList", "engagementStatus", "enrichBtn", "followUpAt", "leadNote", "metaProvider", "metaRecipient", "metaEligibility", "saveEngagement", "saveFollow", "saveNote", "sendMetaBtn", "verifyBtn", "reputationBtn"}
         missing = sorted(js_ids - html_ids - dynamic_ids)
         self.assertEqual(missing, [], f"JavaScript references missing static HTML ids: {missing}")
 
