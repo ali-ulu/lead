@@ -64,7 +64,7 @@ def run_sales_job(
             city=city,country=country,category=category,radius_km=radius_km,max_results=None
         )
         rows=query_leads(search_id=search["search_id"],min_score=min_score)
-        candidates=rows[:max(1,min(250,int(top_n)))]
+        candidates=rows[:max(1,int(top_n))]
 
         processed=[]
         sent=0
