@@ -12,6 +12,8 @@ from .outreach import build_message
 from .providers.nominatim import geocode_area
 from .providers.osm import CATEGORY_FILTERS, _radius_bbox, search_around_detailed
 from .providers.overture import search_bbox as search_overture_bbox
+from .providers.web_search import verify_business_web
+from .providers.google_places import enrich_reputation as google_reputation
 
 PIPELINE_STAGES = {"new","reviewed","contacted","replied","proposal","won","lost"}
 MESSAGE_LANGUAGES = {"en","tr","ur","sd","de"}
@@ -116,28 +118,144 @@ def enrich_lead(lead_id: int) -> dict[str,Any]:
 def verify_lead(lead_id: int) -> dict[str,Any]:
     lead=get_lead(int(lead_id))
     if not lead: raise LookupError("Lead not found.")
-    if lead.get("latitude") is None or lead.get("longitude") is None:
-        return {"lead":lead,"verified":False,"reason":"missing_coordinates"}
-    lat=float(lead["latitude"]); lon=float(lead["longitude"])
-    delta=0.004
-    try:
-        rows=search_overture_bbox(
-            lon-delta,lat-delta,lon+delta,lat+delta,lead.get("category") or "",
-            city=lead.get("city") or "",country=lead.get("country") or "",limit=100,
+
+    checks: list[dict[str,Any]]=[]
+    updated=lead
+
+    # Cross-check the place record against Overture when coordinates exist.
+    if lead.get("latitude") is not None and lead.get("longitude") is not None:
+        lat=float(lead["latitude"]); lon=float(lead["longitude"])
+        delta=0.004
+        try:
+            rows=search_overture_bbox(
+                lon-delta,lat-delta,lon+delta,lat+delta,lead.get("category") or "",
+                city=lead.get("city") or "",country=lead.get("country") or "",limit=100,
+            )
+            merged=merge_leads([updated],rows)
+            matched=next((x for x in merged if len(x.get("source_refs") or {})>=2),None)
+            if matched:
+                updates={
+                    k:matched.get(k) for k in
+                    ("website","phone","email","social_url","social_links","source_refs","website_status")
+                    if matched.get(k) is not None
+                }
+                updates["verification_status"]="cross_source"
+                updates["verification_notes"]=list(dict.fromkeys(
+                    (updated.get("verification_notes") or [])+
+                    ["Cross-checked against Overture Places."]
+                ))
+                updated=update_lead(int(lead_id),updates) or updated
+                checks.append({"provider":"overture","matched":True})
+            else:
+                checks.append({"provider":"overture","matched":False})
+        except Exception as exc:
+            checks.append({"provider":"overture","matched":False,"error":str(exc)})
+
+    # If a website is still missing, use an optional real web-search provider.
+    web_check=None
+    if not updated.get("website"):
+        try:
+            web_check=verify_business_web(
+                name=updated.get("name") or "",
+                city=updated.get("city") or "",
+                country=updated.get("country") or "",
+            )
+            if web_check.get("verified") and web_check.get("website"):
+                website=str(web_check["website"])
+                notes=list(updated.get("verification_notes") or [])
+                notes.append(
+                    f"Official-site candidate verified via {web_check.get('provider')}: {website}"
+                )
+                updated=update_lead(int(lead_id),{
+                    "website":website,
+                    "website_status":"unknown",
+                    "verification_status":"web_verified",
+                    "verification_notes":list(dict.fromkeys(notes)),
+                }) or updated
+            elif web_check.get("configured"):
+                notes=list(updated.get("verification_notes") or [])
+                notes.append(
+                    f"No high-confidence official website found via {web_check.get('provider')}."
+                )
+                updated=update_lead(int(lead_id),{
+                    "verification_status":"verified_no_site",
+                    "verification_notes":list(dict.fromkeys(notes)),
+                }) or updated
+            checks.append({
+                "provider":web_check.get("provider") or "web_search",
+                "matched":bool(web_check.get("verified")),
+                "configured":bool(web_check.get("configured")),
+            })
+        except Exception as exc:
+            web_check={"configured":True,"verified":False,"error":str(exc)}
+            checks.append({"provider":"web_search","matched":False,"error":str(exc)})
+
+    updated=_update_intelligence(int(lead_id),updated)
+    add_activity(
+        int(lead_id),kind="verification",
+        status=updated.get("verification_status") or "unverified",
+        metadata={"checks":checks,"web":web_check or {}},
+    )
+    return {
+        "lead":updated,
+        "verified":updated.get("verification_status") in {"cross_source","web_verified","verified_no_site","verified"},
+        "verification_status":updated.get("verification_status"),
+        "checks":checks,
+        "web_verification":web_check,
+    }
+
+
+def enrich_reputation(lead_id: int) -> dict[str,Any]:
+    lead=get_lead(int(lead_id))
+    if not lead: raise LookupError("Lead not found.")
+
+    result=google_reputation(
+        name=lead.get("name") or "",
+        city=lead.get("city") or "",
+        country=lead.get("country") or "",
+        latitude=float(lead["latitude"]) if lead.get("latitude") is not None else None,
+        longitude=float(lead["longitude"]) if lead.get("longitude") is not None else None,
+    )
+
+    if not result.get("matched"):
+        add_activity(
+            int(lead_id),kind="reputation",status="not_matched",
+            metadata=result,
         )
-        merged=merge_leads([lead],rows)
-        matched=next((x for x in merged if len(x.get("source_refs") or {})>=2),None)
-        if matched:
-            updates={k:matched.get(k) for k in ("website","phone","email","social_url","social_links","source_refs","website_status") if matched.get(k) is not None}
-            updates["verification_status"]="verified_no_site" if not matched.get("website") else "cross_source"
-            updates["verification_notes"]=list(dict.fromkeys((lead.get("verification_notes") or [])+["Cross-checked against Overture Places."]))
-            updated=update_lead(int(lead_id),updates) or lead
-            updated=_update_intelligence(int(lead_id),updated)
-            return {"lead":updated,"verified":True,"matched_source":"overture"}
-    except Exception as exc:
-        return {"lead":lead,"verified":False,"reason":str(exc)}
-    update_lead(int(lead_id),{"verification_notes":list(dict.fromkeys((lead.get("verification_notes") or [])+["No matching Overture place found nearby."]))})
-    return {"lead":get_lead(int(lead_id)),"verified":False,"reason":"no_cross_source_match"}
+        return {"lead":lead,"reputation":result}
+
+    source_refs=dict(lead.get("source_refs") or {})
+    if result.get("place_id"):
+        source_refs["google_places"]=result["place_id"]
+    notes=list(lead.get("verification_notes") or [])
+    notes.append(
+        f"Reputation matched via Google Places ({result.get('match_confidence',0):.2f} confidence)."
+    )
+    updates={
+        "rating":result.get("rating"),
+        "review_count":result.get("review_count"),
+        "source_refs":source_refs,
+        "verification_notes":list(dict.fromkeys(notes)),
+    }
+    if not lead.get("website") and result.get("website"):
+        updates["website"]=result["website"]
+        updates["website_status"]="unknown"
+        updates["verification_status"]="reputation_verified"
+    if not lead.get("phone") and result.get("phone"):
+        updates["phone"]=result["phone"]
+
+    updated=update_lead(int(lead_id),updates) or lead
+    updated=_update_intelligence(int(lead_id),updated)
+    add_activity(
+        int(lead_id),kind="reputation",status="matched",
+        metadata={
+            "source":"google_places",
+            "rating":result.get("rating"),
+            "review_count":result.get("review_count"),
+            "place_id":result.get("place_id"),
+        },
+    )
+    return {"lead":updated,"reputation":result}
 
 def audit_lead(lead_id: int, enrich: bool=True) -> dict[str,Any]:
     lead=get_lead(int(lead_id))
