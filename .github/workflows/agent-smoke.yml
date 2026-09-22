@@ -4,8 +4,11 @@ on:
   push:
     paths:
       - "mcp_server.py"
+      - "server.py"
       - "lead_hunter/services.py"
       - "lead_hunter/exporters.py"
+      - "lead_hunter/providers/osm.py"
+      - "lead_hunter/providers/nominatim.py"
       - "pyproject.toml"
       - "scripts/mcp_smoke.py"
       - ".github/workflows/agent-smoke.yml"
