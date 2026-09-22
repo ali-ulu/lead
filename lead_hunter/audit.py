@@ -132,14 +132,14 @@ class SignalParser(HTMLParser):
             self._jsonld = False
             self._jsonld_buffer = []
         if self._heading_tag and tag == self._heading_tag:
-            text = re.sub(r"\\s+", " ", " ".join(self._heading_buffer)).strip()
+            text = re.sub(r"\s+", " ", " ".join(self._heading_buffer)).strip()
             if text:
                 self.heading_texts.append(text)
             self._heading_tag = ""
             self._heading_buffer = []
 
     def handle_data(self, data):
-        text = re.sub(r"\\s+", " ", data or "").strip()
+        text = re.sub(r"\s+", " ", data or "").strip()
         if not text:
             return
         if self._jsonld:
