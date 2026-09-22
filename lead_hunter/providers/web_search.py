@@ -73,7 +73,6 @@ def _brave_search(query: str, *, count: int=10, country_code: str="") -> list[di
         url,
         headers={
             "Accept":"application/json",
-            "Accept-Encoding":"gzip",
             "X-Subscription-Token":key,
             "User-Agent":USER_AGENT,
         },
