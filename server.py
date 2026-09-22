@@ -23,7 +23,7 @@ from lead_hunter.oauth_meta import (
 )
 from lead_hunter.providers.osm import CATEGORY_FILTERS
 from lead_hunter.services import (
-    audit_lead, discover_businesses, draft_outreach, enrich_lead,
+    audit_lead, discover_businesses, draft_outreach, enrich_lead, enrich_reputation,
     mark_do_not_contact, set_pipeline_stage, verify_lead,
 )
 
@@ -34,7 +34,7 @@ PORT = int(os.environ.get("LEADSCOUT_PORT", os.environ.get("LEAD_HUNTER_PORT", "
 API_TOKEN = os.environ.get("LEADSCOUT_API_TOKEN", "").strip()
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "LeadScout/5.1"
+    server_version = "LeadScout/6.0"
 
     def log_message(self, fmt, *args):
         print(f"[leadscout] {self.address_string()} - {fmt % args}")
@@ -100,8 +100,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if path in {"/api/health","/api/v1/health"}:
             return self._json({
-                "ok":True,"name":"LeadScout","version":"5.1.0",
-                "providers":["OpenStreetMap/Overpass","Overture Places"],
+                "ok":True,"name":"LeadScout","version":"6.0.0",
+                "providers":["OpenStreetMap/Overpass","Overture Places","Brave/SearXNG web verification","Google Places reputation (optional)"],
                 "languages":["en","tr","ur","sd","de"],"agent_api":"/api/v1",
                 "openapi":"/api/v1/openapi.json","mcp":"mcp_server.py",
                 "meta_oauth_configured":{
@@ -217,7 +217,7 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as exc: return self._json({"error":str(exc)},400)
             except Exception as exc: return self._json({"error":str(exc)},502)
 
-        for suffix,func in (("/audit",audit_lead),("/enrich",enrich_lead),("/verify",verify_lead)):
+        for suffix,func in (("/audit",audit_lead),("/enrich",enrich_lead),("/verify",verify_lead),("/reputation",enrich_reputation)):
             if (path.startswith("/api/leads/") or path.startswith("/api/v1/leads/")) and path.endswith(suffix):
                 try: return self._json(func(self._lead_id(path,suffix)))
                 except ValueError as exc: return self._json({"error":str(exc)},400)
@@ -290,7 +290,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers(); self.wfile.write(body)
 
 def main(open_browser: bool=False):
-    initialize(); url=f"http://{HOST}:{PORT}"; print(f"LeadScout 5.1 ready: {url}")
+    initialize(); url=f"http://{HOST}:{PORT}"; print(f"LeadScout 6.0 ready: {url}")
     if open_browser: threading.Timer(0.8,lambda:webbrowser.open(url)).start()
     ThreadingHTTPServer((HOST,PORT),Handler).serve_forever()
 
