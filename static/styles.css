@@ -592,6 +592,30 @@ html[dir="rtl"] .drawer-panel{
   font-size:9px;
   letter-spacing:.14em;
 }
+.visibility-section{margin-top:18px}
+.visibility-grid{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:7px;
+}
+.visibility-card{
+  min-height:72px;
+  padding:10px 8px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:#fff;
+  text-align:center;
+}
+.visibility-card span{display:block;color:#80868c;font-size:8px;font-weight:900;letter-spacing:.12em}
+.visibility-card strong{display:inline-block;margin-top:7px;font-size:22px;line-height:1;font-weight:950;letter-spacing:-.04em}
+.visibility-card small{font-size:8px;color:#a0a5aa}
+.visibility-card.good{border-color:#b8d9c6;background:#f3fbf6}.visibility-card.good strong{color:var(--green)}
+.visibility-card.mid{border-color:#ead1a7;background:#fffaf0}.visibility-card.mid strong{color:var(--amber)}
+.visibility-card.hot{border-color:#e5b5bc;background:#fff5f6}.visibility-card.hot strong{color:var(--red)}
+.visibility-card.na strong{color:#a6abb0}
+.visibility-note{font-size:9px;margin:7px 1px 0}
+.visibility-reason-group{margin-top:16px}
+.visibility-reason-group h5{margin:0 0 5px;color:#6f757b;font-size:10px}
 .kv{
   display:grid;
   grid-template-columns:110px 1fr;
@@ -760,5 +784,6 @@ html[dir="rtl"] .toast{right:auto;left:20px}
   .drawer-panel{width:100%}
   .drawer-body{padding:16px}
   .pipeline-row{grid-template-columns:repeat(3,1fr)}
+  .visibility-grid{grid-template-columns:repeat(3,1fr)}
   .product-note{padding:12px 3px}
 }
