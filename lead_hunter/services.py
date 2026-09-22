@@ -340,6 +340,8 @@ def query_leads(
     website_status: str="", pipeline_status: str="", engagement_status: str="", min_score: int=0,
     min_seo_score: int=0, min_aeo_score: int=0, min_geo_score: int=0,
     min_ai_visibility_score: int=0, min_opportunity_gap_score: int=0,
+    max_seo_score: int=0, max_aeo_score: int=0, max_geo_score: int=0,
+    max_ai_visibility_score: int=0,
     has_social: bool=False, contactable: bool=False,
 ) -> list[dict[str,Any]]:
     filters: dict[str,str]={}
@@ -357,6 +359,10 @@ def query_leads(
         "min_geo_score":min_geo_score,
         "min_ai_visibility_score":min_ai_visibility_score,
         "min_opportunity_gap_score":min_opportunity_gap_score,
+        "max_seo_score":max_seo_score,
+        "max_aeo_score":max_aeo_score,
+        "max_geo_score":max_geo_score,
+        "max_ai_visibility_score":max_ai_visibility_score,
     }.items():
         if value: filters[key]=str(int(value))
     if has_social: filters["has_social"]="1"
