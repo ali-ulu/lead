@@ -12,6 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from html.parser import HTMLParser
+from pathlib import Path
 from typing import Any
 
 USER_AGENT = "Mozilla/5.0 (compatible; LeadScout/5.0; local website audit)"
@@ -120,6 +121,11 @@ class PublicRedirectHandler(urllib.request.HTTPRedirectHandler):
 
 def _lighthouse(url: str, timeout: int = 75) -> dict[str, Any] | None:
     binary = os.environ.get("LEADSCOUT_LIGHTHOUSE_BIN", "").strip() or shutil.which("lighthouse")
+    if not binary:
+        root = Path(__file__).resolve().parents[1]
+        local = root / "node_modules" / ".bin" / ("lighthouse.cmd" if os.name == "nt" else "lighthouse")
+        if local.exists():
+            binary = str(local)
     if not binary:
         return None
     try:
