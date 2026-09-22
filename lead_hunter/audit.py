@@ -10,7 +10,7 @@ import urllib.request
 from html.parser import HTMLParser
 from typing import Any
 
-USER_AGENT = "Mozilla/5.0 (compatible; Nishan/3.0; local website audit)"
+USER_AGENT = "Mozilla/5.0 (compatible; LeadScout/4.0; local website audit)"
 
 SOCIAL_HOSTS = {
     "instagram": ("instagram.com",),
