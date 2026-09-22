@@ -88,3 +88,29 @@ def add_note(lead_id: int,note: str) -> dict[str,Any]:
     existing=(lead.get("notes") or "").strip()
     update_lead(int(lead_id),{"notes":(existing+"\n"+note).strip()})
     return add_activity(int(lead_id),kind="note",body=note)
+
+
+def update_delivery_status(external_id: str, status: str) -> bool:
+    external_id=(external_id or "").strip()
+    if not external_id:
+        return False
+    with connect() as conn:
+        row=conn.execute(
+            "SELECT id,lead_id FROM lead_activities WHERE external_id=? ORDER BY id DESC LIMIT 1",
+            (external_id,),
+        ).fetchone()
+        if not row:
+            return False
+        conn.execute(
+            "UPDATE lead_activities SET status=? WHERE id=?",
+            (status,int(row["id"])),
+        )
+        conn.commit()
+    if status in {"delivered","replied"}:
+        fields={"engagement_status":status}
+        if status=="delivered":
+            fields["last_contacted_at"]=_utcnow()
+        else:
+            fields["last_reply_at"]=_utcnow()
+        update_lead(int(row["lead_id"]),fields)
+    return True
