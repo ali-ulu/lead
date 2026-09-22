@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import os
 import tempfile
 import unittest
@@ -5,10 +7,20 @@ from pathlib import Path
 from unittest.mock import patch
 
 import lead_hunter.db as db
-from lead_hunter.crm import add_activity, list_activities, set_engagement
+from lead_hunter.crm import (
+    add_activity,
+    list_activities,
+    set_engagement,
+    update_delivery_status,
+)
 from lead_hunter.intelligence import calculate_intelligence
 from lead_hunter.merge import merge_leads
-from lead_hunter.oauth_meta import oauth_start_url
+from lead_hunter.oauth_meta import (
+    facebook_oauth_start_url,
+    instagram_oauth_start_url,
+    messaging_eligibility,
+    verify_webhook_signature,
+)
 
 
 class V5FeatureTests(unittest.TestCase):
@@ -64,16 +76,62 @@ class V5FeatureTests(unittest.TestCase):
         self.assertGreaterEqual(len(rows),2)
         self.assertEqual(db.get_lead(lead_id)["engagement_status"],"rejected")
 
-    def test_meta_oauth_url_contains_state(self):
+    def test_delivery_receipt_updates_message_and_lead(self):
+        lead_id=self._lead()
+        add_activity(
+            lead_id,
+            kind="message",
+            channel="facebook",
+            status="sent",
+            direction="out",
+            body="hello",
+            external_id="mid.123",
+        )
+        self.assertTrue(update_delivery_status("mid.123","delivered"))
+        rows=list_activities(lead_id)
+        message=next(x for x in rows if x.get("external_id")=="mid.123")
+        self.assertEqual(message["status"],"delivered")
+        self.assertEqual(db.get_lead(lead_id)["engagement_status"],"delivered")
+
+    def test_facebook_oauth_url_contains_state_and_messaging_scopes(self):
         with patch.dict(os.environ,{
             "META_APP_ID":"123",
             "META_APP_SECRET":"secret",
-            "META_REDIRECT_URI":"http://127.0.0.1:8787/api/v1/oauth/meta/callback",
+            "META_FACEBOOK_REDIRECT_URI":"http://127.0.0.1:8787/api/v1/oauth/meta/facebook/callback",
         },clear=False):
-            url=oauth_start_url()
+            url=facebook_oauth_start_url()
         self.assertIn("client_id=123",url)
         self.assertIn("state=",url)
-        self.assertIn("redirect_uri=",url)
+        self.assertIn("pages_messaging",url)
+
+    def test_instagram_business_login_uses_current_business_scopes(self):
+        with patch.dict(os.environ,{
+            "META_INSTAGRAM_APP_ID":"456",
+            "META_INSTAGRAM_APP_SECRET":"secret",
+            "META_INSTAGRAM_REDIRECT_URI":"http://127.0.0.1:8787/api/v1/oauth/meta/instagram/callback",
+        },clear=False):
+            url=instagram_oauth_start_url()
+        self.assertTrue(url.startswith("https://www.instagram.com/oauth/authorize?"))
+        self.assertIn("instagram_business_basic",url)
+        self.assertIn("instagram_business_manage_messages",url)
+        self.assertIn("state=",url)
+
+    def test_webhook_signature_validation(self):
+        raw=b'{"object":"page","entry":[]}'
+        secret="top-secret"
+        sig="sha256="+hmac.new(secret.encode(),raw,hashlib.sha256).hexdigest()
+        with patch.dict(os.environ,{"META_APP_SECRET":secret},clear=False):
+            self.assertTrue(verify_webhook_signature(raw,sig,"facebook"))
+            self.assertFalse(verify_webhook_signature(raw,"sha256=bad","facebook"))
+
+    def test_messaging_eligibility_requires_real_recipient_id(self):
+        lead_id=self._lead()
+        first=messaging_eligibility(lead_id,"instagram")
+        self.assertFalse(first["eligible"])
+        db.update_lead(lead_id,{"messaging_ids":{"instagram":"IGSID-1"}})
+        second=messaging_eligibility(lead_id,"instagram")
+        self.assertTrue(second["eligible"])
+        self.assertIn("already messaged",second["rule"])
 
 
 if __name__=="__main__":
