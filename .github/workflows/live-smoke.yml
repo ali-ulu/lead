@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: leadscout-live-provider-smoke
+  cancel-in-progress: true
+
 jobs:
   live-smoke:
     runs-on: ubuntu-latest
