@@ -336,12 +336,17 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
             )
             final_host = (urllib.parse.urlparse(final).hostname or "").lower().removeprefix("www.")
             external_hosts: set[str] = set()
+            social_hosts = {host for hosts in SOCIAL_HOSTS.values() for host in hosts}
             for href in parser.hrefs:
                 if not href.startswith(("http://","https://")):
                     continue
                 host = (urllib.parse.urlparse(href).hostname or "").lower().removeprefix("www.")
-                if host and host != final_host and not host.endswith("." + final_host):
-                    external_hosts.add(host)
+                if not host or host == final_host or host.endswith("." + final_host):
+                    continue
+                # Social profiles are entity-identity evidence, not citations/source links.
+                if any(host == social or host.endswith("." + social) for social in social_hosts):
+                    continue
+                external_hosts.add(host)
             fact_signals = len(re.findall(r"(?<!\w)(?:\d+[\d.,%]*|[$€£₺₨]\s?\d+)(?!\w)", body_text))
             year_now = datetime.now(timezone.utc).year
             fresh_signal = any(str(year_now) in value or str(year_now - 1) in value for value in parser.time_values)
