@@ -118,6 +118,8 @@ def upsert_leads(rows: list[dict[str, Any]]) -> list[int]:
             lead.setdefault("messaging_ids", {})
             lead.setdefault("verification_notes", [])
             lead.setdefault("intelligence_reasons", [])
+            lead.setdefault("visibility_reasons", {})
+            lead.setdefault("visibility_signals", {})
             lead = _jsonify(lead)
             values = [lead.get(c) for c in columns]
             protected = {"source","source_id","pipeline_status","engagement_status","follow_up_at","notes"}
