@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Live provider verification for LeadScout 4.0."""
+"""End-to-end live provider verification for LeadScout 4.0."""
 from __future__ import annotations
 
 import json
 import time
 
-from lead_hunter.providers.nominatim import geocode_area
-from lead_hunter.providers.osm import search_around
+from lead_hunter.db import clear_all, initialize
+from lead_hunter.services import discover_businesses, query_leads
 
 VERIFY_RELEASE = "4.0.0"
 
@@ -20,38 +20,40 @@ CASES = [
 
 
 def main() -> int:
+    initialize()
+    clear_all()
     results = []
-    geocodes = {}
 
     for city, country, category, radius in CASES:
-        key = (city, country)
         try:
-            if key not in geocodes:
-                geocodes[key] = geocode_area(city, country, timeout=25)
-                time.sleep(1.2)
-
-            area = geocodes[key]
-            leads = search_around(
-                area["lat"],
-                area["lon"],
-                radius,
-                category,
-                city=area["city"],
-                country=area["country"],
-                timeout=55,
+            result = discover_businesses(
+                city=city,
+                country=country,
+                category=category,
+                radius_km=radius,
+                max_results=None,
             )
+            search_id = result["search_id"]
+            leads = query_leads(search_id=search_id)
+
+            if len(leads) != result["count"]:
+                raise RuntimeError(
+                    f"search_id mismatch: discovery={result['count']} stored={len(leads)}"
+                )
 
             row = {
                 "city": city,
                 "country": country,
                 "category": category,
                 "radius_km": radius,
-                "geocoded_city": area["city"],
+                "search_id": search_id,
                 "count": len(leads),
                 "with_website": sum(bool(x.get("website")) for x in leads),
                 "with_phone": sum(bool(x.get("phone")) for x in leads),
                 "with_email": sum(bool(x.get("email")) for x in leads),
                 "with_social": sum(bool(x.get("social_links")) for x in leads),
+                "ids_preview_count": len(result.get("ids") or []),
+                "ids_truncated": bool(result.get("ids_truncated")),
                 "sample_names": [x["name"] for x in leads[:5]],
             }
         except Exception as exc:
@@ -85,16 +87,25 @@ def main() -> int:
         print("FAIL: no dense case exceeded the former 250-result application cap", flush=True)
         return 5
 
+    dense = [x for x in results if x.get("count", 0) > 500]
+    if dense and not all(x.get("ids_truncated") for x in dense):
+        print("FAIL: large searches did not expose truncated ID previews as designed", flush=True)
+        return 6
+
     verified_cases = sum(1 for x in results if x.get("count", 0) > 0)
     if verified_cases != len(results):
-        print(f"FAIL: only {verified_cases}/{len(results)} live market/category cases returned data", flush=True)
+        print(
+            f"FAIL: only {verified_cases}/{len(results)} live market/category cases returned data",
+            flush=True,
+        )
         return 4
 
     print(
-        f"PASS: LeadScout {VERIFY_RELEASE} returned live data in "
-        f"{verified_cases}/{len(results)} cases and exceeded 250 results",
+        f"PASS: LeadScout {VERIFY_RELEASE} completed {verified_cases}/{len(results)} "
+        "live end-to-end searches, exceeded 250 results, and verified search_id isolation",
         flush=True,
     )
+    clear_all()
     return 0
 
 
