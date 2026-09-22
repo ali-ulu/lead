@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import math
 import urllib.parse
 import urllib.request
 from typing import Any
@@ -9,6 +10,8 @@ OVERPASS_URLS = (
     "https://overpass.kumi.systems/api/interpreter",
 )
 USER_AGENT = "LeadScout/4.0 (local business research tool)"
+
+DENSE_CATEGORIES = {"restaurant", "cafe", "beauty", "hairdresser", "barber", "hotel"}
 
 CATEGORY_FILTERS: dict[str, list[tuple[str, str]]] = {
     "dentist": [("amenity", "dentist")],
@@ -156,5 +159,79 @@ def _normalize(data: dict[str, Any], category: str, city: str, country: str, lim
 def search_bbox(south: float, west: float, north: float, east: float, category: str, city: str = "", country: str = "", timeout: int = 35, limit: int | None = None) -> list[dict[str, Any]]:
     return _normalize(_fetch(_build_query(south, west, north, east, category, timeout), timeout), category, city, country, limit)
 
+
+def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    earth_km = 6371.0088
+    p1 = math.radians(lat1)
+    p2 = math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * earth_km * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _radius_bbox(lat: float, lon: float, radius_km: float) -> tuple[float, float, float, float]:
+    lat_delta = radius_km / 111.32
+    cos_lat = max(0.15, abs(math.cos(math.radians(lat))))
+    lon_delta = radius_km / (111.32 * cos_lat)
+    return lat - lat_delta, lon - lon_delta, lat + lat_delta, lon + lon_delta
+
+
+def _tile_boxes(south: float, west: float, north: float, east: float, grid: int = 2) -> list[tuple[float, float, float, float]]:
+    lat_step = (north - south) / grid
+    lon_step = (east - west) / grid
+    boxes = []
+    for row in range(grid):
+        for col in range(grid):
+            boxes.append((
+                south + row * lat_step,
+                west + col * lon_step,
+                south + (row + 1) * lat_step,
+                west + (col + 1) * lon_step,
+            ))
+    return boxes
+
+
+def _search_tiled_around(
+    lat: float,
+    lon: float,
+    radius_km: int,
+    category: str,
+    city: str,
+    country: str,
+    timeout: int,
+    limit: int | None,
+) -> list[dict[str, Any]]:
+    south, west, north, east = _radius_bbox(lat, lon, radius_km)
+    merged: dict[str, dict[str, Any]] = {}
+
+    for tile_s, tile_w, tile_n, tile_e in _tile_boxes(south, west, north, east, grid=2):
+        data = _fetch(_build_query(tile_s, tile_w, tile_n, tile_e, category, timeout), timeout)
+        for row in _normalize(data, category, city, country, None):
+            row_lat = row.get("latitude")
+            row_lon = row.get("longitude")
+            if row_lat is not None and row_lon is not None:
+                if _distance_km(lat, lon, float(row_lat), float(row_lon)) > radius_km:
+                    continue
+            merged[row["source_id"]] = row
+            if limit is not None and len(merged) >= limit:
+                return list(merged.values())[:limit]
+
+    return list(merged.values()) if limit is None else list(merged.values())[:limit]
+
+
 def search_around(lat: float, lon: float, radius_km: int, category: str, city: str = "", country: str = "", timeout: int = 35, limit: int | None = None) -> list[dict[str, Any]]:
-    return _normalize(_fetch(_build_around_query(lat, lon, int(radius_km) * 1000, category, timeout), timeout), category, city, country, limit)
+    radius_km = max(1, min(100, int(radius_km)))
+    if category in DENSE_CATEGORIES and radius_km >= 10:
+        return _search_tiled_around(lat, lon, radius_km, category, city, country, timeout, limit)
+
+    try:
+        return _normalize(
+            _fetch(_build_around_query(lat, lon, radius_km * 1000, category, timeout), timeout),
+            category,
+            city,
+            country,
+            limit,
+        )
+    except RuntimeError:
+        return _search_tiled_around(lat, lon, radius_km, category, city, country, timeout, limit)
