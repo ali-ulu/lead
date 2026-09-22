@@ -14,7 +14,10 @@ EXPORT_COLUMNS = [
     ("country", "Country"),
     ("city", "City"),
     ("category", "Category"),
-    ("lead_score", "Score"),
+    ("lead_score", "Opportunity Score"),
+    ("contactability_score", "Contactability"),
+    ("commercial_score", "Commercial Score"),
+    ("verification_status", "Verification"),
     ("website_status", "Website Status"),
     ("website", "Website"),
     ("phone", "Phone"),
@@ -28,6 +31,11 @@ EXPORT_COLUMNS = [
     ("telegram", "Telegram"),
     ("whatsapp", "WhatsApp"),
     ("pipeline_status", "Pipeline Stage"),
+    ("engagement_status", "Engagement"),
+    ("last_contacted_at", "Last Contacted"),
+    ("last_reply_at", "Last Reply"),
+    ("follow_up_at", "Follow-up"),
+    ("notes", "Notes"),
     ("source", "Source"),
     ("source_id", "Source ID"),
 ]
@@ -100,7 +108,7 @@ def _sheet_xml(rows: list[dict[str, Any]]) -> str:
 
     last_col = _col_name(len(EXPORT_COLUMNS))
     last_row = max(1, len(matrix))
-    widths = [8, 30, 18, 18, 18, 9, 18, 34, 20, 28, 28, 28, 28, 28, 28, 28, 28, 28, 18, 14, 20]
+    widths = [8,30,18,18,18,14,14,14,18,18,34,20,28,28,28,28,28,28,28,28,28,18,18,22,22,22,38,14,20]
     cols = "".join(
         f'<col min="{i}" max="{i}" width="{width}" customWidth="1"/>'
         for i, width in enumerate(widths, start=1)
