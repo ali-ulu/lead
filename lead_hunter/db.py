@@ -18,6 +18,12 @@ LEAD_MIGRATIONS = {
     "audit_engine": "TEXT",
     "rating": "REAL",
     "review_count": "INTEGER",
+    "aeo_score": "INTEGER",
+    "geo_score": "INTEGER",
+    "ai_visibility_score": "INTEGER",
+    "opportunity_gap_score": "INTEGER",
+    "visibility_reasons": "TEXT NOT NULL DEFAULT '{}'",
+    "visibility_signals": "TEXT NOT NULL DEFAULT '{}'",
     "contactability_score": "INTEGER NOT NULL DEFAULT 0",
     "commercial_score": "INTEGER NOT NULL DEFAULT 0",
     "intelligence_reasons": "TEXT NOT NULL DEFAULT '[]'",
@@ -65,7 +71,8 @@ def _decode(row: sqlite3.Row | None) -> dict[str, Any] | None:
     item = dict(row)
     for key, fallback in {
         "score_reasons": [], "social_links": {}, "messaging_ids": {}, "source_refs": {},
-        "verification_notes": [], "intelligence_reasons": [],
+        "verification_notes": [], "intelligence_reasons": [], "visibility_reasons": {},
+        "visibility_signals": {},
     }.items():
         item[key] = _loads(item.get(key), fallback)
     for key in ("mobile_ok","has_cta","has_booking","has_https","do_not_contact"):
@@ -74,7 +81,7 @@ def _decode(row: sqlite3.Row | None) -> dict[str, Any] | None:
     return item
 
 def _jsonify(clean: dict[str, Any]) -> dict[str, Any]:
-    for key in ("social_links","messaging_ids","source_refs"):
+    for key in ("social_links","messaging_ids","source_refs","visibility_reasons","visibility_signals"):
         if isinstance(clean.get(key), dict):
             clean[key] = json.dumps(clean[key], ensure_ascii=False, sort_keys=True)
     for key in ("score_reasons","verification_notes","intelligence_reasons"):
@@ -87,7 +94,8 @@ def upsert_leads(rows: list[dict[str, Any]]) -> list[int]:
     columns = [
         "source","source_id","source_refs","name","country","city","category","latitude","longitude",
         "website","phone","email","social_url","social_links","messaging_ids","website_status",
-        "verification_status","verification_notes","performance_score","seo_score","accessibility_score",
+        "verification_status","verification_notes","performance_score","seo_score","aeo_score","geo_score",
+        "ai_visibility_score","opportunity_gap_score","visibility_reasons","visibility_signals","accessibility_score",
         "mobile_ok","has_cta","has_booking","has_https","audit_engine","rating","review_count",
         "data_confidence","contactability_score","commercial_score","intelligence_reasons",
         "lead_score","score_reasons","pipeline_status","engagement_status","follow_up_at","notes",
@@ -161,6 +169,11 @@ def list_leads(filters: dict[str, str]) -> list[dict[str, Any]]:
     if min_score:
         try: clauses.append("lead_score>=?"); args.append(int(min_score))
         except ValueError: pass
+    for field in ("seo_score","aeo_score","geo_score","ai_visibility_score","opportunity_gap_score"):
+        value=filters.get("min_"+field,"").strip()
+        if value:
+            try: clauses.append(f"{field}>=?"); args.append(int(value))
+            except ValueError: pass
     sql=f"SELECT * FROM leads WHERE {' AND '.join(clauses)} ORDER BY lead_score DESC, commercial_score DESC, updated_at DESC, name ASC"
     with connect() as conn:
         return [_decode(r) for r in conn.execute(sql,args).fetchall() if r]
@@ -172,7 +185,8 @@ def get_lead(lead_id: int) -> dict[str, Any] | None:
 def update_lead(lead_id: int, fields: dict[str, Any]) -> dict[str, Any] | None:
     allowed = {
         "website","phone","email","social_url","social_links","messaging_ids","source_refs","website_status",
-        "verification_status","verification_notes","performance_score","seo_score","accessibility_score",
+        "verification_status","verification_notes","performance_score","seo_score","aeo_score","geo_score",
+        "ai_visibility_score","opportunity_gap_score","visibility_reasons","visibility_signals","accessibility_score",
         "mobile_ok","has_cta","has_booking","has_https","audit_engine","rating","review_count",
         "data_confidence","contactability_score","commercial_score","intelligence_reasons",
         "pipeline_status","engagement_status","last_contacted_at","last_reply_at","follow_up_at","notes","do_not_contact"
