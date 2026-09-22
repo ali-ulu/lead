@@ -22,8 +22,10 @@ def calculate_intelligence(lead: dict[str,Any]) -> tuple[int,int,list[str]]:
     if lead.get("has_cta") is False: commercial+=10
     if category in BOOKING_VALUE and lead.get("has_booking") is False: commercial+=8
     rating=lead.get("rating"); reviews=lead.get("review_count")
-    if isinstance(rating,(int,float)) and rating>=4: commercial+=7
-    if isinstance(reviews,int) and reviews>=20: commercial+=5
+    if isinstance(rating,(int,float)) and rating>=4:
+        commercial+=7; reasons.append(f"Strong public rating ({rating:.1f})")
+    if isinstance(reviews,int) and reviews>=20:
+        commercial+=5; reasons.append(f"Established review volume ({reviews})")
     if socials: commercial+=5
     commercial=min(100,commercial)
     return contact,commercial,reasons
