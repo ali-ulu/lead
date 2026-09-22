@@ -85,6 +85,20 @@ def list_leads(filters: dict[str, str]) -> list[dict[str, Any]]:
         if value:
             clauses.append(f"LOWER({field}) LIKE LOWER(?)")
             args.append(f"%{value}%")
+    ids_raw = filters.get("ids", "").strip()
+    if ids_raw:
+        ids = []
+        for part in ids_raw.split(","):
+            try:
+                ids.append(int(part))
+            except ValueError:
+                pass
+        if ids:
+            placeholders = ",".join("?" for _ in ids)
+            clauses.append(f"id IN ({placeholders})")
+            args.extend(ids)
+        else:
+            clauses.append("1 = 0")
     status = filters.get("website_status", "").strip()
     if status:
         clauses.append("website_status = ?")
