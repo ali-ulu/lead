@@ -1,37 +1,32 @@
-# Nishan — Project Status
+# LeadScout — Project Status
 
-**Version:** 3.0.0  
-**State:** Ready for local use
+**Version:** 4.0.0  
+**State:** Agent-ready local release
 
 Implemented:
 
-- Global live location lookup
-- OpenStreetMap / Overpass business discovery
+- Global live business discovery
+- No application-level 250-result discovery cap
 - 26 business categories
-- 10 / 20 / 30 / 50 km search radius
-- SQLite persistence and deduplication
-- Missing / unknown / weak / healthy website states
-- Public website audit and score recalculation
+- 1–100 km API radius, 10/20/30/50 km UI presets
+- SQLite persistence and search isolation
+- Search history + full local clear
+- Website state and public website audit
 - Explainable opportunity scoring
 - English / Turkish / Urdu / Sindhi UI
 - RTL support for Urdu and Sindhi
-- EN / TR / UR / SD outreach drafts
-- Social-channel collection from OSM and business websites:
-  - Instagram
-  - Facebook
-  - LinkedIn
-  - X / Twitter
-  - YouTube
-  - TikTok
-  - Telegram
-  - WhatsApp
-- Social-only lead filter
-- Contact/map links
-- Pipeline states
-- Do-not-contact handling
-- CSV export
+- EN / TR / UR / SD / DE outreach drafts
+- Instagram / Facebook / LinkedIn / X / YouTube / TikTok / Telegram / WhatsApp enrichment
+- Social-only filtering
+- Pipeline states and do-not-contact
+- Native XLSX + CSV export
+- Versioned REST API
+- OpenAPI 3.1 document
+- Optional bearer token for REST
+- MCP stdio server
+- MCP Streamable HTTP server
+- Agent tools for discovery, inspection, audit, drafting, pipeline updates, exports and clearing local data
 - Windows / macOS / Linux launchers
-- CI + unit tests
-- Private-network and redirect protection in website audit
+- Normal CI, live provider smoke and MCP smoke workflows
 
-Known data limitation: open-data coverage varies by market. Missing website, email, phone or social data means the reviewed sources did not provide it; it does not prove the channel does not exist elsewhere online.
+Known source limitation: open-data completeness varies by market. Missing contact/web/social fields mean unknown in the reviewed sources, not proven absence.
