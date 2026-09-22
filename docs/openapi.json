@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "LeadScout Agent API",
-    "version": "5.1.0",
-    "description": "Local-first multi-source lead discovery, verification, enrichment, Lighthouse-capable auditing, CRM lifecycle, separate Facebook/Instagram OAuth, Meta messaging, REST agent API and MCP."
+    "version": "6.0.0",
+    "description": "LeadScout 6 API for multi-source lead discovery, web verification, reputation enrichment, CRM, outreach and agents."
   },
   "servers": [
     {
@@ -176,10 +176,20 @@
     },
     "/api/v1/leads/{lead_id}/verify": {
       "post": {
-        "summary": "Cross-check a lead against Overture Places",
+        "summary": "Cross-check a lead against Overture and optional Brave/SearXNG web search",
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Verification result"
+            "description": "Verification result including provider checks and optional web candidate"
           }
         }
       }
@@ -535,6 +545,29 @@
         "responses": {
           "200": {
             "description": "Updated leads"
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{lead_id}/reputation": {
+      "post": {
+        "summary": "Optionally enrich rating, review count, website and phone through Google Places",
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated lead and reputation match"
+          },
+          "502": {
+            "description": "Provider error"
           }
         }
       }
