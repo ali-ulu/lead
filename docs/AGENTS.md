@@ -1,4 +1,4 @@
-# LeadScout 5.1 — Agent Integration
+# LeadScout 6.0 — Agent Integration
 
 LeadScout has two agent surfaces:
 
@@ -49,13 +49,14 @@ The high-level autonomous workflow is:
 
 1. multi-source discovery
 2. dedupe
-3. cross-source verification
+3. cross-source + optional general-web verification
 4. contact/social enrichment
-5. website audit
-6. intelligence scoring
-7. outreach draft
-8. CRM activity
-9. Excel export
+5. optional rating/review reputation enrichment
+6. website audit
+7. intelligence scoring
+8. outreach draft
+9. CRM activity
+10. Excel export
 
 Example intent:
 
@@ -70,6 +71,7 @@ Discovery/read:
 - `get_lead_detail`
 - `verify_business`
 - `enrich_contacts`
+- `enrich_reputation_data`
 - `audit_website`
 - `lead_activity_timeline`
 - `meta_connections`
