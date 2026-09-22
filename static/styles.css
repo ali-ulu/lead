@@ -103,6 +103,8 @@ a{color:inherit}
   font-size:11px;
 }
 .outline-btn:hover{border-color:var(--red);color:var(--red)}
+.danger-outline{color:#8f2935;border-color:#e3c1c6}
+.danger-outline:hover{background:var(--red-faint);border-color:var(--red);color:var(--red)}
 
 .page{
   width:min(1260px,calc(100% - 38px));
@@ -260,6 +262,29 @@ a{color:inherit}
 .busy .spinner{display:block}
 @keyframes spin{to{transform:rotate(360deg)}}
 
+.recent-searches{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  flex-wrap:wrap;
+  padding:0 22px 18px;
+}
+.recent-label{
+  color:#959aa0;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+.recent-chip{
+  border:1px solid var(--line);
+  background:#fff;
+  color:#5f666d;
+  border-radius:999px;
+  padding:6px 9px;
+  font-size:9px;
+}
+.recent-chip:hover{border-color:#d8a3aa;color:var(--red)}
 .results-shell{margin-top:18px}
 .results-heading{border-bottom:1px solid var(--line)}
 .results-heading .muted{margin-top:4px;font-size:11px}
