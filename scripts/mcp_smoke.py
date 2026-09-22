@@ -24,7 +24,15 @@ async def main() -> None:
         if "items" not in payload or "total" not in payload:
             raise SystemExit(f"unexpected list_leads result: {payload!r}")
 
-        print("MCP PASS: capabilities and list_leads tools executed in-process")
+        exported = await client.call_tool("export_leads", {"format": "xlsx"})
+        if exported.is_error:
+            raise SystemExit("export_leads tool returned an error")
+        export_payload = exported.structured_content or {}
+        path = export_payload.get("path")
+        if not path:
+            raise SystemExit(f"unexpected export_leads result: {export_payload!r}")
+
+        print("MCP PASS: capabilities, list_leads and export_leads executed in-process")
 
 
 if __name__ == "__main__":
