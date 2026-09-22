@@ -57,8 +57,9 @@ def search_businesses(
 ) -> dict[str, Any]:
     """Search live business data and store discovered leads locally.
 
-    Omit max_results for no application-level result cap. Use list_leads to read
-    large result sets in pages after this tool returns the matching lead IDs.
+    Omit max_results for no application-level result cap. The result includes a
+    search_id. Pass that search_id to list_leads/export_leads so large result
+    sets never need thousands of IDs in a request.
     """
     initialize()
     return discover_businesses(
@@ -72,6 +73,7 @@ def search_businesses(
 
 @mcp.tool()
 def list_leads(
+    search_id: str = "",
     ids: list[int] | None = None,
     country: str = "",
     city: str = "",
@@ -86,6 +88,7 @@ def list_leads(
     """List/filter stored leads with pagination for agent-friendly responses."""
     initialize()
     rows = query_leads(
+        search_id=search_id,
         ids=ids,
         country=country,
         city=city,
@@ -148,6 +151,7 @@ def do_not_contact(lead_id: int) -> dict[str, Any]:
 @mcp.tool()
 def export_leads(
     format: str = "xlsx",
+    search_id: str = "",
     ids: list[int] | None = None,
     country: str = "",
     city: str = "",
@@ -160,6 +164,7 @@ def export_leads(
     """Export filtered leads to a local CSV or Excel XLSX file and return its path."""
     initialize()
     rows = query_leads(
+        search_id=search_id,
         ids=ids,
         country=country,
         city=city,
