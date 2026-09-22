@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "leadscout-local-business-scout"
-version = "5.1.0"
+version = "6.0.0"
 description = "Local business discovery, multi-source enrichment, CRM, agent API, MCP and social outreach"
 requires-python = ">=3.11"
 dependencies = [
