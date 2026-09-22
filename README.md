@@ -1,18 +1,19 @@
 # LeadScout
 
-**LeadScout 5.1** is a local-first sales opportunity system for finding local businesses, verifying web presence, enriching contact data, auditing websites, preparing outreach, and tracking what happened after contact.
+**LeadScout 6.0** is a local-first sales opportunity system for finding local businesses, verifying web presence, enriching contact data, auditing websites, preparing outreach, and tracking what happened after contact.
 
-## LeadScout 5.1
+## LeadScout 6.0
 
 - **Multi-source discovery:** OpenStreetMap / Overpass + Overture Places.
 - Results are merged and deduplicated by domain, phone, and name + proximity.
 - **No application-level 250-result cap.**
 - Search results expose provider counts, partial-result state and warnings.
-- **Website verification:** "No site found" can be cross-checked against Overture before it becomes a strong sales signal.
+- **Website verification:** "No site found" is cross-checked against Overture and, when configured, Brave Search API or your own SearXNG instance before it becomes a strong sales signal.
 - **Contact enrichment:** public business pages are scanned for email, phone, booking links and social accounts.
 - Instagram, Facebook, LinkedIn, X/Twitter, YouTube, TikTok, Telegram and WhatsApp discovery.
 - **Deep website audit:** Lighthouse performance/accessibility/best-practices/SEO when available, with safe heuristic fallback.
-- Opportunity, contactability and commercial-intent scoring.
+- **Reputation enrichment:** optional Google Places match can add rating, review count, website and phone.
+- Opportunity, contactability and commercial-intent scoring; reputation signals feed the commercial score.
 - CRM with separate pipeline and engagement state.
 - Activity timeline, notes, last contact, last reply and follow-up date.
 - Native XLSX + CSV export including CRM and intelligence fields.
@@ -61,6 +62,30 @@ Engagement outcome:
 `not_contacted / drafted / sent / delivered / replied / rejected / bounced / no_response`
 
 This keeps “where is the deal?” separate from “what happened to the message?”.
+
+## Optional verification & reputation providers
+
+Core discovery still works without paid API keys.
+
+For general-web verification, configure either:
+
+```bash
+BRAVE_SEARCH_API_KEY=...
+# or
+SEARXNG_URL=http://127.0.0.1:8080
+```
+
+Brave is used only when its key is present. A self-hosted SearXNG instance is a no-vendor-lock-in alternative; JSON output must be enabled.
+
+For reputation enrichment:
+
+```bash
+GOOGLE_PLACES_API_KEY=...
+```
+
+LeadScout uses Google Places Text Search only for leads you explicitly enrich or when the sales agent runs with reputation enrichment enabled. Google Places rating, user rating count and website fields are billable fields. Keep billing quotas configured in Google Cloud.
+
+A discovered web result is not accepted blindly. LeadScout excludes major social/directory hosts, scores name/location agreement, and only promotes a high-confidence candidate to the lead website.
 
 ## Meta connection
 
