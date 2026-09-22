@@ -10,7 +10,7 @@ from .crm import add_activity
 from .db import connect, get_lead
 from .exporters import xlsx_bytes
 from .oauth_meta import send_message
-from .services import audit_lead, discover_businesses, draft_outreach, query_leads, verify_lead
+from .services import audit_lead, discover_businesses, draft_outreach, enrich_reputation, query_leads, verify_lead
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -52,6 +52,7 @@ def run_sales_job(
     lang: str="en",
     verify_missing: bool=True,
     audit_websites: bool=True,
+    reputation_enrichment: bool=True,
     send: bool=False,
     send_provider: str="instagram",
     connection_id: int | None=None,
@@ -78,8 +79,17 @@ def run_sales_job(
                 try: audit_lead(lead_id,enrich=True)
                 except Exception: pass
             current=get_lead(lead_id) or current
+            reputation_result=None
+            if reputation_enrichment:
+                try:
+                    reputation_result=enrich_reputation(lead_id).get("reputation")
+                except Exception as exc:
+                    reputation_result={"matched":False,"error":str(exc)}
+            current=get_lead(lead_id) or current
             draft=draft_outreach(lead_id,lang)
             action={"lead_id":lead_id,"name":current.get("name"),"score":current.get("lead_score"),
+                    "commercial_score":current.get("commercial_score"),"rating":current.get("rating"),
+                    "review_count":current.get("review_count"),"reputation":reputation_result,
                     "engagement_status":current.get("engagement_status"),"message":draft["message"],"sent":False}
             if send:
                 if os.environ.get("LEADSCOUT_AGENT_SEND","0")!="1":
