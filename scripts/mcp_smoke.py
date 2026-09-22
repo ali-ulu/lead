@@ -65,6 +65,16 @@ async def main() -> None:
         if payload["items"][0]["name"] != "Karachi MCP Demo":
             raise SystemExit(f"wrong search result: {payload!r}")
 
+        reputation = await client.call_tool(
+            "enrich_reputation_data",
+            {"lead_id": ids[0]},
+        )
+        if reputation.is_error:
+            raise SystemExit("enrich_reputation_data tool returned an error")
+        rep_payload = reputation.structured_content or {}
+        if rep_payload.get("reputation", {}).get("configured") is not False:
+            raise SystemExit(f"unexpected reputation fallback: {rep_payload!r}")
+
         exported = await client.call_tool(
             "export_leads",
             {"format": "xlsx", "search_id": search_id},
@@ -78,7 +88,7 @@ async def main() -> None:
         if not path or not Path(path).is_file():
             raise SystemExit(f"MCP export file missing: {export_payload!r}")
 
-        print("MCP PASS: search_id isolation, pagination and XLSX export")
+        print("MCP PASS: search isolation, reputation tool, pagination and XLSX export")
 
     clear_all()
 
