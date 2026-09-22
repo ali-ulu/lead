@@ -35,6 +35,9 @@ def main() -> int:
             "count": len(leads),
             "search_id": result["search_id"],
             "minimum": minimum,
+            "providers": result.get("providers") or {},
+            "partial": bool(result.get("partial")),
+            "warnings": result.get("warnings") or [],
             "sample": [x["name"] for x in leads[:3]],
         }
         rows.append(row)
@@ -46,6 +49,13 @@ def main() -> int:
                 flush=True,
             )
             return 2
+        providers = result.get("providers") or {}
+        if "osm" not in providers or "overture" not in providers:
+            print(f"FAIL: multi-source provider summary missing for {city}: {providers}", flush=True)
+            return 3
+        if providers.get("overture", {}).get("count", 0) <= 0:
+            print(f"FAIL: Overture returned no data inside combined search for {city}", flush=True)
+            return 4
 
     print("PASS", json.dumps(rows, ensure_ascii=False), flush=True)
     clear_all()
