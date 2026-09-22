@@ -24,7 +24,7 @@ def main() -> int:
             country=country,
             category=category,
             radius_km=radius_km,
-            max_results=None,
+            max_results=300,
         )
         leads = query_leads(search_id=result["search_id"])
         row = {
