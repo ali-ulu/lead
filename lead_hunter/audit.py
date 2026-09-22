@@ -1,5 +1,9 @@
 from __future__ import annotations
 import re
+import json
+import os
+import shutil
+import subprocess
 import ssl
 import time
 import socket
@@ -10,7 +14,7 @@ import urllib.request
 from html.parser import HTMLParser
 from typing import Any
 
-USER_AGENT = "Mozilla/5.0 (compatible; LeadScout/4.0; local website audit)"
+USER_AGENT = "Mozilla/5.0 (compatible; LeadScout/5.0; local website audit)"
 
 SOCIAL_HOSTS = {
     "instagram": ("instagram.com",),
@@ -113,6 +117,37 @@ class PublicRedirectHandler(urllib.request.HTTPRedirectHandler):
         _assert_public_host(target)
         return super().redirect_request(req, fp, code, msg, headers, target)
 
+
+def _lighthouse(url: str, timeout: int = 75) -> dict[str, Any] | None:
+    binary = os.environ.get("LEADSCOUT_LIGHTHOUSE_BIN", "").strip() or shutil.which("lighthouse")
+    if not binary:
+        return None
+    try:
+        proc = subprocess.run(
+            [
+                binary, url, "--quiet", "--output=json", "--output-path=stdout",
+                "--only-categories=performance,accessibility,best-practices,seo",
+                "--chrome-flags=--headless --no-sandbox --disable-gpu",
+            ],
+            capture_output=True, text=True, timeout=timeout, check=False,
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return None
+        report=json.loads(proc.stdout)
+        cats=report.get("categories") or {}
+        def score(name: str):
+            value=(cats.get(name) or {}).get("score")
+            return round(float(value)*100) if value is not None else None
+        return {
+            "performance_score":score("performance"),
+            "accessibility_score":score("accessibility"),
+            "best_practices_score":score("best-practices"),
+            "seo_score":score("seo"),
+            "lighthouse_version":report.get("lighthouseVersion"),
+        }
+    except Exception:
+        return None
+
 def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
     url = normalize_url(url)
     _assert_public_host(url)
@@ -151,15 +186,32 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
             if not parser.meta_description: quality_flags.append("Missing meta description")
             if parser.images and parser.alt_images / max(1, parser.images) < 0.5: quality_flags.append("Many images lack alt text")
             if latest_year and latest_year <= 2022: quality_flags.append(f"Old copyright signal ({latest_year})")
-            weak = len(quality_flags) >= 2 or (not parser.viewport) or (not final.startswith("https://"))
+            lighthouse = _lighthouse(final)
+            performance_score = (lighthouse or {}).get("performance_score")
+            accessibility_score = (lighthouse or {}).get("accessibility_score")
+            lighthouse_seo = (lighthouse or {}).get("seo_score")
+            if performance_score is None:
+                performance_score = _speed_proxy(elapsed)
+            if lighthouse_seo is not None:
+                seo_score = lighthouse_seo
+            weak = (
+                len(quality_flags) >= 2
+                or (not parser.viewport)
+                or (not final.startswith("https://"))
+                or (performance_score is not None and performance_score < 45)
+                or (seo_score is not None and seo_score < 55)
+            )
             return {
                 "reachable": True,
                 "status": getattr(resp, "status", 200),
                 "final_url": final,
                 "has_https": final.startswith("https://"),
                 "response_ms": elapsed,
-                "performance_score": _speed_proxy(elapsed),
+                "performance_score": performance_score,
+                "accessibility_score": accessibility_score,
+                "best_practices_score": (lighthouse or {}).get("best_practices_score"),
                 "seo_score": seo_score,
+                "audit_engine": "lighthouse+heuristic" if lighthouse else "heuristic",
                 "mobile_ok": parser.viewport,
                 "has_cta": parser.tel or parser.contact or parser.forms > 0,
                 "has_booking": parser.booking,
@@ -171,7 +223,7 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
                 "quality_flags": quality_flags,
                 "social_links": parser.social_links,
                 "website_status": "weak" if weak else "healthy",
-                "note": "Performance is a response-time proxy, not a Lighthouse score.",
+                "note": "Lighthouse scores are used when a local Lighthouse binary is available; otherwise performance falls back to a response-time proxy.",
             }
     except (urllib.error.URLError, TimeoutError, ssl.SSLError) as exc:
         return {"reachable": False, "error": str(exc), "website_status": "weak", "social_links": {}}
