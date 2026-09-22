@@ -127,21 +127,38 @@ class VisibilityDatabaseTests(unittest.TestCase):
         self.assertEqual(db.list_leads({"min_opportunity_gap_score": "90"}), [])
 
     def test_low_visibility_can_be_targeted_with_max_filters(self):
-        db.upsert_leads([{
-            "source": "test",
-            "source_id": "gap-2",
-            "name": "Strong Visibility Business",
-            "country": "Pakistan",
-            "city": "Karachi",
-            "category": "dentist",
-            "website": "https://strong.test",
-            "website_status": "healthy",
-            "seo_score": 88,
-            "aeo_score": 82,
-            "geo_score": 79,
-            "ai_visibility_score": 83,
-            "opportunity_gap_score": 22,
-        }])
+        db.upsert_leads([
+            {
+                "source": "test",
+                "source_id": "gap-1",
+                "name": "Weak Visibility Business",
+                "country": "Pakistan",
+                "city": "Karachi",
+                "category": "dentist",
+                "website": "https://weak.test",
+                "website_status": "weak",
+                "seo_score": 30,
+                "aeo_score": 20,
+                "geo_score": 15,
+                "ai_visibility_score": 22,
+                "opportunity_gap_score": 86,
+            },
+            {
+                "source": "test",
+                "source_id": "gap-2",
+                "name": "Strong Visibility Business",
+                "country": "Pakistan",
+                "city": "Karachi",
+                "category": "dentist",
+                "website": "https://strong.test",
+                "website_status": "healthy",
+                "seo_score": 88,
+                "aeo_score": 82,
+                "geo_score": 79,
+                "ai_visibility_score": 83,
+                "opportunity_gap_score": 22,
+            },
+        ])
         rows = db.list_leads({"max_ai_visibility_score": "40"})
         self.assertEqual([row["source_id"] for row in rows], ["gap-1"])
         rows = db.list_leads({"max_seo_score": "35", "max_geo_score": "20"})
