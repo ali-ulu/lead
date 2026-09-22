@@ -1,8 +1,8 @@
 # LeadScout
 
-**LeadScout 6.0** is a local-first sales opportunity system for finding local businesses, verifying web presence, enriching contact data, auditing websites, preparing outreach, and tracking what happened after contact.
+**LeadScout 7.0** is a local-first sales opportunity system for finding local businesses, verifying web presence, enriching contact data, auditing websites, preparing outreach, and tracking what happened after contact.
 
-## LeadScout 6.0
+## LeadScout 7.0
 
 - **Multi-source discovery:** OpenStreetMap / Overpass + Overture Places.
 - Results are merged and deduplicated by domain, phone, and name + proximity.
@@ -11,7 +11,10 @@
 - **Website verification:** "No site found" is cross-checked against Overture and, when configured, Brave Search API or your own SearXNG instance before it becomes a strong sales signal.
 - **Contact enrichment:** public business pages are scanned for email, phone, booking links and social accounts.
 - Instagram, Facebook, LinkedIn, X/Twitter, YouTube, TikTok, Telegram and WhatsApp discovery.
-- **Deep website audit:** Lighthouse performance/accessibility/best-practices/SEO when available, with safe heuristic fallback.
+- **Deep website audit:** Lighthouse performance/accessibility/best-practices plus structured content analysis.
+- **SEO / AEO / GEO / AI Visibility scorecard:** evidence-based 0–100 readiness scores with inspectable reasons.
+- **Opportunity Gap:** combines weak digital visibility with commercial attractiveness to prioritize sales opportunities.
+- Scores are readiness heuristics, not ranking, AI citation, or traffic predictions.
 - **Reputation enrichment:** optional Google Places match can add rating, review count, website and phone.
 - Opportunity, contactability and commercial-intent scoring; reputation signals feed the commercial score.
 - CRM with separate pipeline and engagement state.
@@ -21,7 +24,7 @@
 - EN / TR / UR / SD / DE outreach drafts.
 - REST / OpenAPI agent API.
 - MCP stdio + Streamable HTTP.
-- Autonomous agent workflow: search → verify → audit/enrich → draft → Excel.
+- Autonomous agent workflow: search → verify → audit/enrich → visibility scoring → draft → Excel.
 - Scoped agent write/send/clear permissions and persistent agent audit log.
 - Facebook Page + Instagram professional-account OAuth flows.
 - OAuth tokens encrypted locally.
@@ -137,3 +140,18 @@ The repository has independent checks for:
 - Overture-only live checks in Karachi and Berlin
 
 Public-data coverage still varies by market. Provider warnings and partial results are exposed rather than hidden.
+
+
+## Visibility scorecard
+
+LeadScout audits each available website into five inspectable scores:
+
+- **SEO**: indexability, HTTPS, mobile, title/meta/H1, canonical, performance and business/entity structured data.
+- **AEO**: answer-oriented headings, content depth, semantic structure, explicit business facts and extractable answers.
+- **GEO**: entity clarity, structured facts, cross-profile identity, external source links, factual density, authorship and freshness.
+- **AI Visibility**: weighted readiness from SEO, AEO and GEO.
+- **Opportunity Gap**: digital visibility weakness weighted with commercial opportunity.
+
+Google's generative-search guidance still relies on normal SEO fundamentals; LeadScout therefore does not award magic points for llms.txt or deprecated FAQ rich-result tricks.
+
+A verified business with no independent website receives zero owned-web readiness scores and a high Opportunity Gap. An unverified missing website remains unscored until verification.
