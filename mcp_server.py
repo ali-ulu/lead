@@ -177,7 +177,9 @@ def send_social_message(lead_id:int,provider:str,text:str,recipient_id:str="",co
 
 @mcp.tool()
 def run_sales_agent(city:str,category:str,country:str="",radius_km:int=20,top_n:int=50,
-                    min_score:int=40,min_opportunity_gap:int=0,lang:str="en",verify_missing:bool=True,
+                    min_score:int=40,min_opportunity_gap:int=0,
+                    max_seo_score:int=0,max_aeo_score:int=0,max_geo_score:int=0,max_ai_visibility_score:int=0,
+                    lang:str="en",verify_missing:bool=True,
                     audit_websites:bool=True,reputation_enrichment:bool=False,
                     send:bool=False,send_provider:str="instagram",
                     connection_id:int|None=None) -> dict[str,Any]:
@@ -188,6 +190,8 @@ def run_sales_agent(city:str,category:str,country:str="",radius_km:int=20,top_n:
         require_permission("LEADSCOUT_MCP_ALLOW_SEND","MCP message sending",default=False)
     result=run_sales_job(city=city,category=category,country=country,radius_km=radius_km,
                          top_n=top_n,min_score=min_score,min_opportunity_gap=min_opportunity_gap,
+                         max_seo_score=max_seo_score,max_aeo_score=max_aeo_score,
+                         max_geo_score=max_geo_score,max_ai_visibility_score=max_ai_visibility_score,
                          lang=lang,verify_missing=verify_missing,
                          audit_websites=audit_websites,reputation_enrichment=reputation_enrichment,
                          send=send,send_provider=send_provider,
@@ -212,12 +216,15 @@ def do_not_contact(lead_id:int) -> dict[str,Any]:
 def export_leads(format:str="xlsx",search_id:str="",ids:list[int]|None=None,country:str="",city:str="",
                  category:str="",website_status:str="",pipeline_status:str="",engagement_status:str="",
                  min_score:int=0,min_opportunity_gap_score:int=0,
+                 max_seo_score:int=0,max_aeo_score:int=0,max_geo_score:int=0,max_ai_visibility_score:int=0,
                  has_social:bool=False,contactable:bool=False) -> dict[str,Any]:
     initialize()
     rows=query_leads(search_id=search_id,ids=ids,country=country,city=city,category=category,
                      website_status=website_status,pipeline_status=pipeline_status,
                      engagement_status=engagement_status,min_score=min_score,
                      min_opportunity_gap_score=min_opportunity_gap_score,
+                     max_seo_score=max_seo_score,max_aeo_score=max_aeo_score,max_geo_score=max_geo_score,
+                     max_ai_visibility_score=max_ai_visibility_score,
                      has_social=has_social,contactable=contactable)
     fmt=format.lower().strip()
     if fmt not in {"csv","xlsx"}: raise ValueError("format must be csv or xlsx")
