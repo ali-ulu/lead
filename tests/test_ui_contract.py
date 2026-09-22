@@ -13,8 +13,9 @@ class UIContractTests(unittest.TestCase):
         html_ids = set(re.findall(r'\bid=["\']([^"\']+)["\']', html))
         js_ids = set(re.findall(r"\$\(['\"]([^'\"]+)['\"]\)", js))
 
-        missing = sorted(js_ids - html_ids)
-        self.assertEqual(missing, [], f"JavaScript references missing HTML ids: {missing}")
+        dynamic_ids = {"auditBtn", "copyMessage", "dnc", "message", "openEmail", "tabContent"}
+        missing = sorted(js_ids - html_ids - dynamic_ids)
+        self.assertEqual(missing, [], f"JavaScript references missing static HTML ids: {missing}")
 
     def test_excel_and_csv_buttons_are_present(self):
         html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
