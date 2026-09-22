@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#b31224">
-  <title>Nishan — Local Business Scout</title>
+  <title>LeadScout — Local Business Scout</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <header class="topbar">
-    <a class="brand" href="/" aria-label="Nishan home">
+    <a class="brand" href="/" aria-label="LeadScout home">
       <span class="brand-mark" aria-hidden="true">ن</span>
       <span class="brand-copy">
-        <strong>Nishan</strong>
+        <strong>LeadScout</strong>
         <small data-i18n="brandTagline">Local business scout</small>
       </span>
     </a>
@@ -31,7 +31,8 @@
         </select>
       </label>
       <button id="clearHistory" class="outline-btn danger-outline" data-i18n="clearHistory">Clear history</button>
-      <button id="export" class="outline-btn" data-i18n="exportCsv">Export CSV</button>
+      <button id="exportXlsx" class="outline-btn export-primary" data-i18n="exportXlsx">Excel</button>
+      <button id="exportCsv" class="outline-btn" data-i18n="exportCsv">CSV</button>
     </div>
   </header>
 
@@ -57,7 +58,7 @@
           <span class="section-index">01</span>
           <div>
             <p class="kicker" data-i18n="searchKicker">SEARCH MARKET</p>
-            <h2 id="search-title" data-i18n="searchTitle">Where should Nishan look?</h2>
+            <h2 id="search-title" data-i18n="searchTitle">Where should LeadScout look?</h2>
           </div>
         </div>
         <p id="areaLabel" data-i18n="searchHelp">Choose a city, industry and radius. No API key required.</p>
