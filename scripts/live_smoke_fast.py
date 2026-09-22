@@ -6,6 +6,8 @@ import json
 from lead_hunter.db import clear_all, initialize
 from lead_hunter.services import discover_businesses, query_leads
 
+VERIFY_RELEASE = "7.0.0"
+
 CASES = [
     ("Karachi", "Pakistan", "dentist", 20, 1),
     ("Istanbul", "Türkiye", "restaurant", 8, 251),
