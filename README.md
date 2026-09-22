@@ -1,63 +1,76 @@
 # LeadScout
 
-**LeadScout** is a local-first business opportunity scout. Choose a country, city/area, industry and radius; LeadScout discovers local businesses, highlights missing or weak web presence, collects contact/social channels, audits public websites and prepares human-reviewed outreach drafts.
+**LeadScout 5.1** is a local-first sales opportunity system for finding local businesses, verifying web presence, enriching contact data, auditing websites, preparing outreach, and tracking what happened after contact.
 
-## LeadScout 4.0
+## LeadScout 5.1
 
-- Global live discovery with OpenStreetMap / Overpass.
-- **No application-level 250-result cap.** Search returns the provider's complete result set unless an explicit `max_results` is requested through the agent API.
-- English, Turkish, Urdu and Sindhi interface.
-- Automatic RTL layout for Urdu and Sindhi.
-- Social-channel capture from OSM tags and public business websites:
-  - Instagram
-  - Facebook
-  - LinkedIn
-  - X / Twitter
-  - YouTube
-  - TikTok
-  - Telegram
-  - WhatsApp
-- Explainable 0–100 opportunity score.
-- Public website audit.
-- Local pipeline and do-not-contact state.
-- Search history with one-click clearing.
-- **Excel XLSX + CSV export.**
-- **Versioned REST / OpenAPI agent API.**
-- **MCP server for autonomous agents**, with stdio and Streamable HTTP transports.
-- SQLite local persistence.
-- No API key, n8n, Apify or paid CRM required for the core app.
+- **Multi-source discovery:** OpenStreetMap / Overpass + Overture Places.
+- Results are merged and deduplicated by domain, phone, and name + proximity.
+- **No application-level 250-result cap.**
+- Search results expose provider counts, partial-result state and warnings.
+- **Website verification:** "No site found" can be cross-checked against Overture before it becomes a strong sales signal.
+- **Contact enrichment:** public business pages are scanned for email, phone, booking links and social accounts.
+- Instagram, Facebook, LinkedIn, X/Twitter, YouTube, TikTok, Telegram and WhatsApp discovery.
+- **Deep website audit:** Lighthouse performance/accessibility/best-practices/SEO when available, with safe heuristic fallback.
+- Opportunity, contactability and commercial-intent scoring.
+- CRM with separate pipeline and engagement state.
+- Activity timeline, notes, last contact, last reply and follow-up date.
+- Native XLSX + CSV export including CRM and intelligence fields.
+- English / Turkish / Urdu / Sindhi UI, with RTL for Urdu/Sindhi.
+- EN / TR / UR / SD / DE outreach drafts.
+- REST / OpenAPI agent API.
+- MCP stdio + Streamable HTTP.
+- Autonomous agent workflow: search → verify → audit/enrich → draft → Excel.
+- Scoped agent write/send/clear permissions and persistent agent audit log.
+- Facebook Page + Instagram professional-account OAuth flows.
+- OAuth tokens encrypted locally.
+- Meta reply/delivery lifecycle support where webhook events can be matched.
 
-## Start the app
+## Start
 
-### Windows
-Double-click `START_WINDOWS.bat`.
-
-### macOS
-Double-click `START_MAC.command`.
-
-### Linux
+Windows: double-click `START_WINDOWS.bat`  
+macOS: double-click `START_MAC.command`  
+Linux:
 
 ```bash
 ./start.sh
 ```
 
-Or:
+The launcher creates a local `.venv`, installs Python dependencies and, when npm is available, installs local Lighthouse tooling.
 
-```bash
-python3 LeadScout.py
-```
-
-The UI opens at:
+UI:
 
 ```text
 http://127.0.0.1:8787
 ```
 
-Core requirement: Python 3.11+.
+## Data sources
+
+LeadScout uses OpenStreetMap and Overture Places by default. If a provider is unavailable, the search is marked partial and warnings are returned instead of pretending the result is complete.
+
+A missing website, email or social field means **not found in the reviewed sources**, not proof of absence.
+
+## CRM
+
+Sales pipeline:
+
+`new → reviewed → contacted → replied → proposal → won/lost`
+
+Engagement outcome:
+
+`not_contacted / drafted / sent / delivered / replied / rejected / bounced / no_response`
+
+This keeps “where is the deal?” separate from “what happened to the message?”.
+
+## Meta connection
+
+Facebook and Instagram OAuth are separate. Configure account-specific credentials through environment variables in `.env.example`.
+
+Important: a public Instagram/Facebook username or profile URL is not automatically a sendable recipient ID. Official messaging only works when the connected business account and the target conversation are API-eligible. LeadScout does not invent or bypass recipient IDs.
 
 ## Agent API
 
-REST base:
+REST:
 
 ```text
 http://127.0.0.1:8787/api/v1
@@ -69,95 +82,33 @@ OpenAPI:
 http://127.0.0.1:8787/api/v1/openapi.json
 ```
 
-Optional REST protection:
+MCP stdio:
 
 ```bash
-export LEADSCOUT_API_TOKEN="change-me"
-python3 LeadScout.py
-```
-
-Full REST/MCP guide: [docs/AGENTS.md](docs/AGENTS.md).
-
-## MCP
-
-Install the official MCP Python SDK v2 line:
-
-```bash
-python -m pip install "mcp>=2,<3"
-```
-
-Local stdio:
-
-```bash
+python -m pip install -e ".[agents]"
 python mcp_server.py
 ```
 
-Streamable HTTP:
+MCP Streamable HTTP:
 
 ```bash
 python mcp_server.py --transport streamable-http --host 127.0.0.1 --port 8790
 ```
 
-MCP endpoint:
+Endpoint: `http://127.0.0.1:8790/mcp`
 
-```text
-http://127.0.0.1:8790/mcp
-```
-
-Tools exposed:
-
-`capabilities`, `search_businesses`, `list_leads`, `get_lead_detail`, `audit_website`, `draft_outreach_message`, `update_pipeline_stage`, `do_not_contact`, `export_leads`, `clear_local_data`.
-
-## Typical human workflow
-
-1. Choose country, city/area, industry and radius.
-2. Find leads.
-3. Filter by site state, social availability, score or pipeline stage.
-4. Open a lead.
-5. Review phone, email and social channels.
-6. Audit the website when one exists.
-7. Generate an EN/TR/UR/SD outreach draft.
-8. Move the lead through the pipeline.
-9. Export the current result set as Excel or CSV.
-
-## Data accuracy
-
-Discovery uses OpenStreetMap through public Overpass endpoints and Nominatim for geocoding. Coverage varies by market.
-
-**“No site found” means the reviewed sources did not provide an independent website. It is not proof that no website exists anywhere online.**
-
-Missing email, phone or social data is also unknown, not proof of absence.
-
-The website audit uses lightweight public-page heuristics. Its performance signal is a response-time proxy, not Google Lighthouse.
-
-## Result limits
-
-LeadScout itself no longer caps discovery at 250 records. Overpass queries use `out tags center qt;` without an output-count parameter. OpenStreetMap's Overpass infrastructure is still shared public infrastructure and can impose operational constraints such as timeouts or memory limits.
-
-For very large production workloads, use a compliant dedicated data provider or self-hosted data pipeline rather than overloading public community endpoints.
-
-## Export
-
-The UI can download:
-
-- `leadscout-leads.xlsx`
-- `leadscout-leads.csv`
-
-Excel output is a native XLSX workbook with frozen headers, filters, column sizing and dedicated social-channel columns.
-
-## Privacy & safety
-
-- Lead data stays in local SQLite.
-- No analytics/telemetry.
-- Website audit blocks localhost/private-network targets and private redirects.
-- Messages are drafted only, never auto-sent.
-- Do-not-contact state is hidden from normal lists.
-- REST API binds locally by default and can require a bearer token.
+Full guide: [docs/AGENTS.md](docs/AGENTS.md)
 
 ## Verification
 
-The repository contains three verification layers:
+The repository has independent checks for:
 
-- normal CI: unit tests, Python compilation and frontend JavaScript syntax
-- live provider smoke: Pakistan + other countries against real public data
-- agent smoke: installs the official MCP SDK and calls LeadScout tools in-process
+- unit tests
+- Python compilation
+- frontend JavaScript syntax
+- REST + Excel smoke
+- MCP stdio + Streamable HTTP smoke
+- live OSM + Overture combined discovery
+- Overture-only live checks in Karachi and Berlin
+
+Public-data coverage still varies by market. Provider warnings and partial results are exposed rather than hidden.
