@@ -7,12 +7,13 @@ from typing import Any
 from .db import connect
 
 
-def permission_enabled(name: str) -> bool:
-    return os.environ.get(name, "0").strip() == "1"
+def permission_enabled(name: str, default: bool = False) -> bool:
+    fallback = "1" if default else "0"
+    return os.environ.get(name, fallback).strip() == "1"
 
 
-def require_permission(name: str, description: str) -> None:
-    if not permission_enabled(name):
+def require_permission(name: str, description: str, *, default: bool = False) -> None:
+    if not permission_enabled(name, default=default):
         raise ValueError(f"{description} is disabled. Set {name}=1 to enable it.")
 
 
