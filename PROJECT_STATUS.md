@@ -1,32 +1,41 @@
 # LeadScout — Project Status
 
-**Version:** 4.0.0  
-**State:** Agent-ready local release
+**Version:** 5.1.0  
+**State:** Local sales/agent release
 
 Implemented:
 
-- Global live business discovery
-- No application-level 250-result discovery cap
-- 26 business categories
-- 1–100 km API radius, 10/20/30/50 km UI presets
-- SQLite persistence and search isolation
-- Search history + full local clear
-- Website state and public website audit
-- Explainable opportunity scoring
-- English / Turkish / Urdu / Sindhi UI
-- RTL support for Urdu and Sindhi
-- EN / TR / UR / SD / DE outreach drafts
-- Instagram / Facebook / LinkedIn / X / YouTube / TikTok / Telegram / WhatsApp enrichment
-- Social-only filtering
-- Pipeline states and do-not-contact
-- Native XLSX + CSV export
-- Versioned REST API
-- OpenAPI 3.1 document
-- Optional bearer token for REST
-- MCP stdio server
-- MCP Streamable HTTP server
-- Agent tools for discovery, inspection, audit, drafting, pipeline updates, exports and clearing local data
-- Windows / macOS / Linux launchers
-- Normal CI, live provider smoke and MCP smoke workflows
+- OSM + Overture multi-source live discovery
+- Global country/city/category/radius search
+- No application-level 250-result cap
+- Provider-level partial-result warnings
+- Cross-source deduplication and source references
+- Website/no-website cross-checking
+- Public website contact enrichment
+- Email, phone, booking and 8 social-channel extraction
+- Lighthouse audit when available + safe heuristic fallback
+- SSRF/private-network protections
+- Opportunity, contactability and commercial scoring
+- Pipeline stages
+- Engagement states: not_contacted / drafted / sent / delivered / replied / rejected / bounced / no_response
+- Activity timeline
+- Notes and follow-up date
+- Last contact / last reply tracking
+- Delivery/reply webhook lifecycle support
+- Do-not-contact
+- XLSX + CSV with CRM/intelligence fields
+- EN / TR / UR / SD interface
+- RTL Urdu/Sindhi
+- REST/OpenAPI
+- MCP stdio + Streamable HTTP
+- Autonomous sales-agent workflow
+- Scoped agent write/send/clear permissions
+- Persistent agent audit log
+- Facebook OAuth
+- Instagram professional-account OAuth
+- Encrypted local OAuth tokens
+- Meta messaging for eligible recipient/conversation IDs
+- Windows/macOS/Linux bootstrap launchers
+- Normal CI + MCP smoke + Overture live smoke + combined live smoke
 
-Known source limitation: open-data completeness varies by market. Missing contact/web/social fields mean unknown in the reviewed sources, not proven absence.
+Important limitation: public Instagram/Facebook profile URLs are not arbitrary messaging recipient IDs. Meta message sending only works where the connected business account and target conversation are API-eligible.
