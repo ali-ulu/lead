@@ -1,14 +1,24 @@
 import unittest
-from lead_hunter.providers.osm import _build_around_query, _social, _socials
+from lead_hunter.providers.osm import _build_around_query, _normalize, _social, _socials
 from lead_hunter.audit import normalize_url, _assert_public_host, SignalParser
 from lead_hunter.outreach import build_message
 
+
 class ProviderTests(unittest.TestCase):
-    def test_around_query_is_bounded(self):
+    def test_around_query_has_no_output_limit(self):
         q = _build_around_query(24.8607, 67.0011, 20000, "dentist", 35)
         self.assertIn('amenity', q)
         self.assertIn('around:20000,24.8607,67.0011', q)
-        self.assertIn('out center tags 250', q)
+        self.assertIn('out tags center qt;', q)
+        self.assertNotIn(' 250;', q)
+
+    def test_normalize_unlimited_mode(self):
+        elements = [
+            {"type": "node", "id": i, "lat": 1.0, "lon": 2.0, "tags": {"name": f"Business {i}"}}
+            for i in range(600)
+        ]
+        rows = _normalize({"elements": elements}, "restaurant", "Test City", "Test Country", None)
+        self.assertEqual(len(rows), 600)
 
     def test_social_handle_becomes_url(self):
         self.assertEqual(
@@ -18,12 +28,12 @@ class ProviderTests(unittest.TestCase):
 
     def test_multiple_social_channels(self):
         socials = _socials({
-            'contact:instagram': '@nishan',
-            'contact:facebook': 'nishan.pk',
+            'contact:instagram': '@leadscout',
+            'contact:facebook': 'leadscout.example',
             'contact:whatsapp': '+92 300 1234567',
         })
-        self.assertEqual(socials['instagram'], 'https://instagram.com/nishan')
-        self.assertEqual(socials['facebook'], 'https://facebook.com/nishan.pk')
+        self.assertEqual(socials['instagram'], 'https://instagram.com/leadscout')
+        self.assertEqual(socials['facebook'], 'https://facebook.com/leadscout.example')
         self.assertEqual(socials['whatsapp'], 'https://wa.me/923001234567')
 
     def test_website_parser_collects_social_links(self):
@@ -49,6 +59,7 @@ class ProviderTests(unittest.TestCase):
     def test_sindhi_outreach(self):
         message = build_message({'name':'Example','website':None,'website_status':'missing'}, 'sd')
         self.assertIn('السلام عليڪم', message)
+
 
 if __name__ == '__main__':
     unittest.main()
