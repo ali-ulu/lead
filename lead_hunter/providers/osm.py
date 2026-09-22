@@ -206,34 +206,19 @@ def _fetch_tile_rows(
     country: str,
     timeout: int,
     depth: int = 0,
-    max_depth: int = 2,
+    max_depth: int = 0,
 ) -> list[dict[str, Any]]:
+    # Public Overpass instances are best-effort shared infrastructure.
+    # A single slow tile must not make the whole user search fail.
+    tile_timeout = min(timeout, 15)
     try:
-        data = _fetch(_build_query(south, west, north, east, category, timeout), timeout)
+        data = _fetch(
+            _build_query(south, west, north, east, category, tile_timeout),
+            tile_timeout,
+        )
         return _normalize(data, category, city, country, None)
     except RuntimeError:
-        if depth >= max_depth:
-            return []
-
-        rows: list[dict[str, Any]] = []
-        for sub_s, sub_w, sub_n, sub_e in _tile_boxes(
-            south, west, north, east, grid=2
-        ):
-            rows.extend(
-                _fetch_tile_rows(
-                    sub_s,
-                    sub_w,
-                    sub_n,
-                    sub_e,
-                    category,
-                    city,
-                    country,
-                    timeout,
-                    depth + 1,
-                    max_depth,
-                )
-            )
-        return rows
+        return []
 
 
 def _search_tiled_around(
