@@ -49,6 +49,7 @@ def run_sales_job(
     radius_km: int=20,
     top_n: int=50,
     min_score: int=40,
+    min_opportunity_gap: int=0,
     lang: str="en",
     verify_missing: bool=True,
     audit_websites: bool=True,
@@ -86,9 +87,21 @@ def run_sales_job(
                 except Exception as exc:
                     reputation_result={"matched":False,"error":str(exc)}
             current=get_lead(lead_id) or current
+            if min_opportunity_gap and (current.get("opportunity_gap_score") is None or int(current.get("opportunity_gap_score") or 0) < int(min_opportunity_gap)):
+                processed.append({
+                    "lead_id":lead_id,
+                    "name":current.get("name"),
+                    "skipped":True,
+                    "reason":"opportunity_gap_below_threshold",
+                    "opportunity_gap_score":current.get("opportunity_gap_score"),
+                })
+                continue
             draft=draft_outreach(lead_id,lang)
             action={"lead_id":lead_id,"name":current.get("name"),"score":current.get("lead_score"),
-                    "commercial_score":current.get("commercial_score"),"rating":current.get("rating"),
+                    "commercial_score":current.get("commercial_score"),
+                    "seo_score":current.get("seo_score"),"aeo_score":current.get("aeo_score"),
+                    "geo_score":current.get("geo_score"),"ai_visibility_score":current.get("ai_visibility_score"),
+                    "opportunity_gap_score":current.get("opportunity_gap_score"),"rating":current.get("rating"),
                     "review_count":current.get("review_count"),"reputation":reputation_result,
                     "engagement_status":current.get("engagement_status"),"message":draft["message"],"sent":False}
             if send:
