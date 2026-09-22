@@ -1,0 +1,11 @@
+{
+  "name": "leadscout-audit-tools",
+  "private": true,
+  "version": "5.0.0",
+  "scripts": {
+    "audit:version": "lighthouse --version"
+  },
+  "devDependencies": {
+    "lighthouse": "^13.0.0"
+  }
+}
