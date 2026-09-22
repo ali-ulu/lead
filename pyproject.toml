@@ -1,5 +1,5 @@
 [project]
-name = "ai-ulu-lead-hunter"
-version = "1.0.0"
-description = "Global local-business lead discovery and explainable website-opportunity scoring"
+name = "nishan-local-business-scout"
+version = "3.0.0"
+description = "Global local-business opportunity discovery with website audits, social-channel enrichment and multilingual outreach"
 requires-python = ">=3.11"
