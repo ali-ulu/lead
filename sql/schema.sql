@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS leads (
     email TEXT,
     social_url TEXT,
     social_links TEXT NOT NULL DEFAULT '{}',
+    messaging_ids TEXT NOT NULL DEFAULT '{}',
     website_status TEXT NOT NULL DEFAULT 'unknown',
     verification_status TEXT NOT NULL DEFAULT 'unverified',
     verification_notes TEXT NOT NULL DEFAULT '[]',
