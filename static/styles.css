@@ -103,6 +103,8 @@ a{color:inherit}
   font-size:11px;
 }
 .outline-btn:hover{border-color:var(--red);color:var(--red)}
+.export-primary{border-color:#d49aa2;color:var(--red);background:var(--red-faint);font-weight:800}
+.export-primary:hover{background:var(--red-soft)}
 .danger-outline{color:#8f2935;border-color:#e3c1c6}
 .danger-outline:hover{background:var(--red-faint);border-color:var(--red);color:var(--red)}
 
