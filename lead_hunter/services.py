@@ -7,6 +7,7 @@ from .crm import add_activity
 from .db import get_lead, list_leads, record_search_run, update_lead, upsert_leads
 from .enrichment import enrich_website
 from .intelligence import calculate_intelligence
+from .visibility import calculate_visibility, missing_website_visibility
 from .merge import merge_leads
 from .outreach import build_message
 from .providers.nominatim import geocode_area
@@ -91,9 +92,32 @@ def discover_businesses(
 
 def _update_intelligence(lead_id: int, lead: dict[str,Any]) -> dict[str,Any]:
     contact,commercial,reasons=calculate_intelligence(lead)
-    return update_lead(lead_id,{
-        "contactability_score":contact,"commercial_score":commercial,"intelligence_reasons":reasons
-    }) or lead
+    updates: dict[str,Any] = {
+        "contactability_score":contact,
+        "commercial_score":commercial,
+        "intelligence_reasons":reasons,
+    }
+
+    signals=lead.get("visibility_signals") or {}
+    if lead.get("website") and signals:
+        visibility=calculate_visibility(signals,commercial_score=commercial)
+        updates.update({
+            "seo_score":visibility.get("seo_score"),
+            "aeo_score":visibility.get("aeo_score"),
+            "geo_score":visibility.get("geo_score"),
+            "ai_visibility_score":visibility.get("ai_visibility_score"),
+            "opportunity_gap_score":visibility.get("opportunity_gap_score"),
+            "visibility_reasons":visibility.get("visibility_reasons") or {},
+            "visibility_signals":visibility.get("visibility_signals") or signals,
+        })
+    elif not lead.get("website"):
+        visibility=missing_website_visibility(
+            commercial_score=commercial,
+            verified=lead.get("verification_status")=="verified_no_site",
+        )
+        updates.update(visibility)
+
+    return update_lead(lead_id,updates) or lead
 
 def enrich_lead(lead_id: int) -> dict[str,Any]:
     lead=get_lead(int(lead_id))
@@ -267,6 +291,11 @@ def audit_lead(lead_id: int, enrich: bool=True) -> dict[str,Any]:
     updates={
         "website_status":result.get("website_status","weak"),
         "performance_score":result.get("performance_score"),"seo_score":result.get("seo_score"),
+        "aeo_score":result.get("aeo_score"),"geo_score":result.get("geo_score"),
+        "ai_visibility_score":result.get("ai_visibility_score"),
+        "opportunity_gap_score":result.get("opportunity_gap_score"),
+        "visibility_reasons":result.get("visibility_reasons") or {},
+        "visibility_signals":result.get("visibility_signals") or {},
         "accessibility_score":result.get("accessibility_score"),"mobile_ok":result.get("mobile_ok"),
         "has_cta":result.get("has_cta"),"has_booking":result.get("has_booking"),"has_https":result.get("has_https"),
         "audit_engine":result.get("audit_engine","heuristic"),
@@ -309,6 +338,8 @@ def mark_do_not_contact(lead_id: int) -> dict[str,Any]:
 def query_leads(
     *, search_id: str="", ids: list[int] | None=None, country: str="", city: str="", category: str="",
     website_status: str="", pipeline_status: str="", engagement_status: str="", min_score: int=0,
+    min_seo_score: int=0, min_aeo_score: int=0, min_geo_score: int=0,
+    min_ai_visibility_score: int=0, min_opportunity_gap_score: int=0,
     has_social: bool=False, contactable: bool=False,
 ) -> list[dict[str,Any]]:
     filters: dict[str,str]={}
@@ -320,6 +351,14 @@ def query_leads(
     }.items():
         if value: filters[key]=value
     if min_score: filters["min_score"]=str(int(min_score))
+    for key,value in {
+        "min_seo_score":min_seo_score,
+        "min_aeo_score":min_aeo_score,
+        "min_geo_score":min_geo_score,
+        "min_ai_visibility_score":min_ai_visibility_score,
+        "min_opportunity_gap_score":min_opportunity_gap_score,
+    }.items():
+        if value: filters[key]=str(int(value))
     if has_social: filters["has_social"]="1"
     if contactable: filters["contactable"]="1"
     return list_leads(filters)
