@@ -66,7 +66,7 @@ This keeps “where is the deal?” separate from “what happened to the messag
 
 Facebook and Instagram OAuth are separate. Configure account-specific credentials through environment variables in `.env.example`.
 
-Important: a public Instagram/Facebook username or profile URL is not automatically a sendable recipient ID. Official messaging only works when the connected business account and the target conversation are API-eligible. LeadScout does not invent or bypass recipient IDs.
+Important: a public Instagram/Facebook username or profile URL is not automatically a sendable recipient ID. Instagram's official messaging API can reply only after the Instagram user has messaged the connected professional account. Messenger requires an eligible Page-scoped recipient and the applicable messaging window/permission. LeadScout therefore never treats a discovered profile as permission to cold-DM it and does not invent or bypass recipient IDs.
 
 ## Agent API
 
