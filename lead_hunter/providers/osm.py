@@ -103,18 +103,22 @@ def _build_around_query(lat: float, lon: float, radius_m: int, category: str, ti
     parts = [f'nwr["{key}"="{value}"](around:{radius_m},{lat},{lon});' for key, value in filters]
     return f'[out:json][timeout:{timeout}];({"".join(parts)});out tags center qt;'
 
-def _fetch(query: str, timeout: int) -> dict[str, Any]:
+def _fetch_one(endpoint: str, query: str, timeout: int) -> dict[str, Any]:
     payload = urllib.parse.urlencode({"data": query}).encode()
+    req = urllib.request.Request(
+        endpoint,
+        data=payload,
+        headers={"User-Agent": USER_AGENT, "Content-Type": "application/x-www-form-urlencoded"},
+    )
+    with urllib.request.urlopen(req, timeout=timeout + 5) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _fetch(query: str, timeout: int) -> dict[str, Any]:
     last_error: Exception | None = None
     for endpoint in OVERPASS_URLS:
         try:
-            req = urllib.request.Request(
-                endpoint,
-                data=payload,
-                headers={"User-Agent": USER_AGENT, "Content-Type": "application/x-www-form-urlencoded"},
-            )
-            with urllib.request.urlopen(req, timeout=timeout + 8) as resp:
-                return json.loads(resp.read().decode("utf-8"))
+            return _fetch_one(endpoint, query, timeout)
         except Exception as exc:
             last_error = exc
     raise RuntimeError(f"OpenStreetMap query failed: {last_error}")
@@ -223,10 +227,23 @@ def _search_tiled_around(
 def search_around(lat: float, lon: float, radius_km: int, category: str, city: str = "", country: str = "", timeout: int = 35, limit: int | None = None) -> list[dict[str, Any]]:
     radius_km = max(1, min(100, int(radius_km)))
 
-    # Fast path: ask Overpass once for the whole radius with no output-count cap.
-    # This is both faster for users and lighter on shared public infrastructure.
-    # If a dense market times out or the provider refuses the large query,
-    # transparently fall back to smaller tiled bounding-box queries.
+    # Dense markets get one short uncapped probe first. If that cannot finish
+    # quickly, fall back immediately to smaller tiles instead of waiting through
+    # full timeouts on multiple public endpoints.
+    if category in DENSE_CATEGORIES and radius_km >= 10:
+        probe_timeout = min(timeout, 12)
+        try:
+            data = _fetch_one(
+                OVERPASS_URLS[0],
+                _build_around_query(lat, lon, radius_km * 1000, category, probe_timeout),
+                probe_timeout,
+            )
+            return _normalize(data, category, city, country, limit)
+        except Exception:
+            return _search_tiled_around(
+                lat, lon, radius_km, category, city, country, timeout, limit
+            )
+
     try:
         return _normalize(
             _fetch(_build_around_query(lat, lon, radius_km * 1000, category, timeout), timeout),
