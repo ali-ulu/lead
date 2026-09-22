@@ -5,7 +5,7 @@ import urllib.request
 from typing import Any
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
-USER_AGENT = "Nishan/3.0 (local business research tool)"
+USER_AGENT = "LeadScout/4.0 (local business research tool)"
 
 def geocode_area(city: str, country: str = "", timeout: int = 20) -> dict[str, Any]:
     query = ", ".join(x.strip() for x in (city, country) if x and x.strip())
