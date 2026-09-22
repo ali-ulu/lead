@@ -149,7 +149,7 @@ def _normalize(data: dict[str, Any], category: str, city: str, country: str, lim
             "website_status": "unknown" if website else "missing",
             "data_confidence": "medium",
         })
-        if len(out) >= limit:
+        if limit is not None and len(out) >= limit:
             break
     return out
 
