@@ -155,3 +155,12 @@ LeadScout audits each available website into five inspectable scores:
 Google's generative-search guidance still relies on normal SEO fundamentals; LeadScout therefore does not award magic points for llms.txt or deprecated FAQ rich-result tricks.
 
 A verified business with no independent website receives zero owned-web readiness scores and a high Opportunity Gap. An unverified missing website remains unscored until verification.
+
+For sales targeting, LeadScout can filter both directions:
+
+- minimum `Opportunity Gap` to keep commercially interesting digital gaps,
+- maximum `SEO`, `AEO`, `GEO`, or `AI Visibility / AIO` to intentionally find weak digital presence.
+
+Example agent brief:
+
+> Find Karachi dentists with Opportunity Gap >= 70 and AIO <= 40, verify/audit them, then prepare outreach only for the leads that still match those thresholds.
