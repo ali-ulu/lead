@@ -52,7 +52,7 @@ def run_sales_job(
     lang: str="en",
     verify_missing: bool=True,
     audit_websites: bool=True,
-    reputation_enrichment: bool=True,
+    reputation_enrichment: bool=False,
     send: bool=False,
     send_provider: str="instagram",
     connection_id: int | None=None,
