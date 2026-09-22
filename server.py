@@ -34,7 +34,7 @@ PORT = int(os.environ.get("LEADSCOUT_PORT", os.environ.get("LEAD_HUNTER_PORT", "
 API_TOKEN = os.environ.get("LEADSCOUT_API_TOKEN", "").strip()
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "LeadScout/6.0"
+    server_version = "LeadScout/7.0"
 
     def log_message(self, fmt, *args):
         print(f"[leadscout] {self.address_string()} - {fmt % args}")
@@ -100,7 +100,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path in {"/api/health","/api/v1/health"}:
             return self._json({
-                "ok":True,"name":"LeadScout","version":"6.0.0",
+                "ok":True,"name":"LeadScout","version":"7.0.0",
                 "providers":["OpenStreetMap/Overpass","Overture Places","Brave/SearXNG web verification","Google Places reputation (optional)"],
                 "languages":["en","tr","ur","sd","de"],"agent_api":"/api/v1",
                 "openapi":"/api/v1/openapi.json","mcp":"mcp_server.py",
@@ -290,7 +290,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers(); self.wfile.write(body)
 
 def main(open_browser: bool=False):
-    initialize(); url=f"http://{HOST}:{PORT}"; print(f"LeadScout 6.0 ready: {url}")
+    initialize(); url=f"http://{HOST}:{PORT}"; print(f"LeadScout 7.0 ready: {url}")
     if open_browser: threading.Timer(0.8,lambda:webbrowser.open(url)).start()
     ThreadingHTTPServer((HOST,PORT),Handler).serve_forever()
 
