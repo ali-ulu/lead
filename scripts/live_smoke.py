@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import time
 from lead_hunter.providers.nominatim import geocode_area
-from lead_hunter.providers.osm import search_around
+from lead_hunter.providers.osm import search_around\n\nVERIFY_RELEASE = "3.1.0"
 
 CASES = [
     ("Karachi", "Pakistan", "dentist", 20),
