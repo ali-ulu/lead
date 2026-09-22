@@ -8,6 +8,7 @@ let socialOnly = false;
 let draftText = '';
 let currentLang = localStorage.getItem('leadscoutLang') || localStorage.getItem('nishanLang') || 'en';
 let lastAudit = null;
+let activeSearchId = localStorage.getItem('leadscoutActiveSearchId') || '';
 let activeIds = JSON.parse(localStorage.getItem('leadscoutActiveIds') || localStorage.getItem('nishanActiveIds') || '[]');
 let searchHistory = JSON.parse(localStorage.getItem('leadscoutHistory') || localStorage.getItem('nishanHistory') || '[]');
 
@@ -165,7 +166,8 @@ async function api(url,options={}){
 
 function filters(){
   const params=new URLSearchParams();
-  if(activeIds.length) params.set('ids',activeIds.join(','));
+  if(activeSearchId) params.set('search_id',activeSearchId);
+  else if(activeIds.length) params.set('ids',activeIds.join(','));
   if(websiteFilter) params.set('website_status',websiteFilter);
   if(socialOnly) params.set('has_social','1');
   const score=$('min_score').value.trim();
@@ -176,7 +178,7 @@ function filters(){
 }
 
 async function load(){
-  if(!activeIds.length){
+  if(!activeSearchId && !activeIds.length){
     leads=[];
     renderTable();
     return;
@@ -245,6 +247,7 @@ function renderTable(){
 
 function saveHistory(){
   localStorage.setItem('leadscoutHistory',JSON.stringify(searchHistory));
+  localStorage.setItem('leadscoutActiveSearchId',activeSearchId);
   localStorage.setItem('leadscoutActiveIds',JSON.stringify(activeIds));
 }
 
@@ -262,7 +265,8 @@ function renderRecentSearches(){
     $('city').value=item.city||'';
     $('category').value=item.category||'';
     $('radius_km').value=String(item.radius_km||20);
-    activeIds=Array.isArray(item.ids)?item.ids:[];
+    activeSearchId=item.search_id||'';
+    activeIds=activeSearchId?[]:(Array.isArray(item.ids)?item.ids:[]);
     localStorage.setItem('leadscoutSearch',JSON.stringify({
       country:item.country||'',city:item.city||'',category:item.category||'',radius_km:item.radius_km||20
     }));
@@ -280,12 +284,14 @@ function rememberSearch(search,data){
     city:search.city,
     category:search.category,
     radius_km:search.radius_km,
+    search_id:data.search_id||'',
     ids:Array.isArray(data.ids)?data.ids:[],
     display_name:data.area?.display_name||`${search.city}, ${search.country}`,
     at:Date.now()
   };
   searchHistory=[entry,...searchHistory.filter(item=>item.key!==key)].slice(0,6);
-  activeIds=entry.ids;
+  activeSearchId=entry.search_id;
+  activeIds=activeSearchId?[]:entry.ids;
   saveHistory();
   renderRecentSearches();
 }
@@ -294,6 +300,7 @@ async function clearHistory(){
   if(!confirm(t('confirmClearHistory'))) return;
   try{
     await api('/api/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    activeSearchId='';
     activeIds=[];
     searchHistory=[];
     leads=[];
@@ -301,7 +308,7 @@ async function clearHistory(){
     currentLead=null;
     draftText='';
     lastAudit=null;
-    ['leadscoutSearch','leadscoutHistory','leadscoutActiveIds','nishanSearch','nishanHistory','nishanActiveIds','nishanLang','leadHunterSearch'].forEach(key=>localStorage.removeItem(key));
+    ['leadscoutSearch','leadscoutHistory','leadscoutActiveSearchId','leadscoutActiveIds','nishanSearch','nishanHistory','nishanActiveIds','nishanLang','leadHunterSearch'].forEach(key=>localStorage.removeItem(key));
     $('country').value='';
     $('city').value='';
     $('category').value='';
@@ -569,7 +576,7 @@ function bind(){
   $('discover').addEventListener('click',discover);
   $('clearHistory').addEventListener('click',clearHistory);
   const doExport=(format)=>{
-    if(!activeIds.length){toast(t('noActiveSearch'),true);return;}
+    if(!activeSearchId && !activeIds.length){toast(t('noActiveSearch'),true);return;}
     location.href=`/api/export.${format}?${filters()}`;
   };
   $('exportXlsx').addEventListener('click',()=>doExport('xlsx'));
