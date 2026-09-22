@@ -100,6 +100,11 @@ def upsert_leads(rows: list[dict[str, Any]]) -> list[int]:
             lead["score_reasons"] = reasons
             lead.setdefault("pipeline_status", "new")
             lead.setdefault("engagement_status", "not_contacted")
+            lead.setdefault("website_status", "unknown")
+            lead.setdefault("verification_status", "unverified")
+            lead.setdefault("data_confidence", "unknown")
+            lead.setdefault("contactability_score", 0)
+            lead.setdefault("commercial_score", 0)
             lead.setdefault("source_refs", {lead.get("source","unknown"): lead.get("source_id")})
             lead.setdefault("social_links", {})
             lead.setdefault("messaging_ids", {})
