@@ -10,7 +10,18 @@ import urllib.request
 from html.parser import HTMLParser
 from typing import Any
 
-USER_AGENT = "Mozilla/5.0 (compatible; AI-ULU-Lead-Hunter/1.0; local website audit)"
+USER_AGENT = "Mozilla/5.0 (compatible; Nishan/3.0; local website audit)"
+
+SOCIAL_HOSTS = {
+    "instagram": ("instagram.com",),
+    "facebook": ("facebook.com", "fb.com"),
+    "linkedin": ("linkedin.com",),
+    "x": ("x.com", "twitter.com"),
+    "youtube": ("youtube.com", "youtu.be"),
+    "tiktok": ("tiktok.com",),
+    "telegram": ("t.me", "telegram.me"),
+    "whatsapp": ("wa.me", "api.whatsapp.com", "whatsapp.com"),
+}
 
 class SignalParser(HTMLParser):
     def __init__(self):
@@ -26,6 +37,7 @@ class SignalParser(HTMLParser):
         self.scripts = 0
         self.images = 0
         self.alt_images = 0
+        self.social_links: dict[str, str] = {}
 
     def handle_starttag(self, tag, attrs):
         tag = tag.lower()
@@ -36,11 +48,17 @@ class SignalParser(HTMLParser):
             if d.get("name", "").lower() == "description" and d.get("content", "").strip():
                 self.meta_description = True
         if tag == "a":
-            href = d.get("href", "").lower()
+            raw_href = d.get("href", "").strip()
+            href = raw_href.lower()
             textish = " ".join(d.values()).lower()
             self.tel = self.tel or href.startswith("tel:")
-            self.contact = self.contact or any(x in href for x in ("contact", "iletisim", "iletişim", "kontakt", "contato"))
+            self.contact = self.contact or any(x in href for x in ("contact", "iletisim", "iletişim", "kontakt", "contato", "رابطہ"))
             self.booking = self.booking or any(x in href + " " + textish for x in ("book", "appointment", "reservation", "randevu", "termin", "reserve"))
+            if raw_href.startswith(("http://", "https://")):
+                host = (urllib.parse.urlparse(raw_href).hostname or "").lower()
+                for platform, hosts in SOCIAL_HOSTS.items():
+                    if any(host == item or host.endswith("." + item) for item in hosts):
+                        self.social_links.setdefault(platform, raw_href)
         if tag == "form":
             self.forms += 1
         if tag == "h1":
@@ -95,7 +113,6 @@ class PublicRedirectHandler(urllib.request.HTTPRedirectHandler):
         _assert_public_host(target)
         return super().redirect_request(req, fp, code, msg, headers, target)
 
-
 def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
     url = normalize_url(url)
     _assert_public_host(url)
@@ -110,7 +127,8 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
             raw = resp.read(1_800_000)
             body = raw.decode(resp.headers.get_content_charset() or "utf-8", errors="replace")
             elapsed = round((time.perf_counter() - start) * 1000)
-            p = SignalParser(); p.feed(body)
+            parser = SignalParser()
+            parser.feed(body)
             final = resp.geturl()
             _assert_public_host(final)
             title_match = re.search(r"<title[^>]*>(.*?)</title>", body, flags=re.I | re.S)
@@ -119,21 +137,21 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
             latest_year = max(years) if years else None
             seo_score = 100
             if not title: seo_score -= 30
-            if not p.meta_description: seo_score -= 25
-            if p.h1 == 0: seo_score -= 20
-            if not p.viewport: seo_score -= 15
+            if not parser.meta_description: seo_score -= 25
+            if parser.h1 == 0: seo_score -= 20
+            if not parser.viewport: seo_score -= 15
             seo_score = max(0, seo_score)
             quality_flags: list[str] = []
-            if not p.viewport: quality_flags.append("No mobile viewport")
-            if not (p.tel or p.contact or p.forms): quality_flags.append("No clear contact CTA")
-            if not p.booking: quality_flags.append("No booking/reservation signal")
+            if not parser.viewport: quality_flags.append("No mobile viewport")
+            if not (parser.tel or parser.contact or parser.forms): quality_flags.append("No clear contact CTA")
+            if not parser.booking: quality_flags.append("No booking/reservation signal")
             if not final.startswith("https://"): quality_flags.append("HTTPS missing")
             if elapsed > 2500: quality_flags.append("Slow first response")
             if not title: quality_flags.append("Missing page title")
-            if not p.meta_description: quality_flags.append("Missing meta description")
-            if p.images and p.alt_images / max(1, p.images) < 0.5: quality_flags.append("Many images lack alt text")
+            if not parser.meta_description: quality_flags.append("Missing meta description")
+            if parser.images and parser.alt_images / max(1, parser.images) < 0.5: quality_flags.append("Many images lack alt text")
             if latest_year and latest_year <= 2022: quality_flags.append(f"Old copyright signal ({latest_year})")
-            weak = len(quality_flags) >= 2 or (not p.viewport) or (not final.startswith("https://"))
+            weak = len(quality_flags) >= 2 or (not parser.viewport) or (not final.startswith("https://"))
             return {
                 "reachable": True,
                 "status": getattr(resp, "status", 200),
@@ -142,17 +160,18 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
                 "response_ms": elapsed,
                 "performance_score": _speed_proxy(elapsed),
                 "seo_score": seo_score,
-                "mobile_ok": p.viewport,
-                "has_cta": p.tel or p.contact or p.forms > 0,
-                "has_booking": p.booking,
-                "has_tel_link": p.tel,
-                "has_contact_path": p.contact,
-                "form_count": p.forms,
+                "mobile_ok": parser.viewport,
+                "has_cta": parser.tel or parser.contact or parser.forms > 0,
+                "has_booking": parser.booking,
+                "has_tel_link": parser.tel,
+                "has_contact_path": parser.contact,
+                "form_count": parser.forms,
                 "title": title,
                 "latest_copyright_year": latest_year,
                 "quality_flags": quality_flags,
+                "social_links": parser.social_links,
                 "website_status": "weak" if weak else "healthy",
                 "note": "Performance is a response-time proxy, not a Lighthouse score.",
             }
     except (urllib.error.URLError, TimeoutError, ssl.SSLError) as exc:
-        return {"reachable": False, "error": str(exc), "website_status": "weak"}
+        return {"reachable": False, "error": str(exc), "website_status": "weak", "social_links": {}}
