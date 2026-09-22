@@ -3,6 +3,9 @@ name: Live provider smoke
 on:
   push:
     paths:
+      - "lead_hunter/providers/osm.py"
+      - "lead_hunter/providers/nominatim.py"
+      - "lead_hunter/services.py"
       - "scripts/live_smoke.py"
       - ".github/workflows/live-smoke.yml"
 
@@ -12,7 +15,7 @@ permissions:
 jobs:
   live-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     env:
       PYTHONPATH: .
     steps:
@@ -20,5 +23,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Run live multi-country smoke
+      - name: Run live multi-country uncapped smoke
         run: python scripts/live_smoke.py
