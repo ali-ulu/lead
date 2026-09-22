@@ -8,7 +8,7 @@ OVERPASS_URLS = (
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
 )
-USER_AGENT = "Nishan/3.0 (local business research tool)"
+USER_AGENT = "LeadScout/4.0 (local business research tool)"
 
 CATEGORY_FILTERS: dict[str, list[tuple[str, str]]] = {
     "dentist": [("amenity", "dentist")],
@@ -156,5 +156,5 @@ def _normalize(data: dict[str, Any], category: str, city: str, country: str, lim
 def search_bbox(south: float, west: float, north: float, east: float, category: str, city: str = "", country: str = "", timeout: int = 35, limit: int | None = None) -> list[dict[str, Any]]:
     return _normalize(_fetch(_build_query(south, west, north, east, category, timeout), timeout), category, city, country, limit)
 
-def search_around(lat: float, lon: float, radius_km: int, category: str, city: str = "", country: str = "", timeout: int = 35, limit: int = 250) -> list[dict[str, Any]]:
+def search_around(lat: float, lon: float, radius_km: int, category: str, city: str = "", country: str = "", timeout: int = 35, limit: int | None = None) -> list[dict[str, Any]]:
     return _normalize(_fetch(_build_around_query(lat, lon, int(radius_km) * 1000, category, timeout), timeout), category, city, country, limit)
