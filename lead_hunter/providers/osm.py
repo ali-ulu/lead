@@ -222,9 +222,11 @@ def _search_tiled_around(
 
 def search_around(lat: float, lon: float, radius_km: int, category: str, city: str = "", country: str = "", timeout: int = 35, limit: int | None = None) -> list[dict[str, Any]]:
     radius_km = max(1, min(100, int(radius_km)))
-    if category in DENSE_CATEGORIES and radius_km >= 10:
-        return _search_tiled_around(lat, lon, radius_km, category, city, country, timeout, limit)
 
+    # Fast path: ask Overpass once for the whole radius with no output-count cap.
+    # This is both faster for users and lighter on shared public infrastructure.
+    # If a dense market times out or the provider refuses the large query,
+    # transparently fall back to smaller tiled bounding-box queries.
     try:
         return _normalize(
             _fetch(_build_around_query(lat, lon, radius_km * 1000, category, timeout), timeout),
