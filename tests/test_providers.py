@@ -1,5 +1,6 @@
 import unittest
-from lead_hunter.providers.osm import _build_around_query, _normalize, _social, _socials
+from unittest.mock import patch
+from lead_hunter.providers.osm import _build_around_query, _fetch_tile_rows, _normalize, _social, _socials
 from lead_hunter.audit import normalize_url, _assert_public_host, SignalParser
 from lead_hunter.outreach import build_message
 
@@ -19,6 +20,36 @@ class ProviderTests(unittest.TestCase):
         ]
         rows = _normalize({"elements": elements}, "restaurant", "Test City", "Test Country", None)
         self.assertEqual(len(rows), 600)
+
+
+    def test_timed_out_tile_is_split_instead_of_killing_search(self):
+        calls = {"count": 0}
+
+        def fake_fetch(query, timeout):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise RuntimeError("timeout")
+            return {
+                "elements": [
+                    {
+                        "type": "node",
+                        "id": calls["count"],
+                        "lat": 1.0,
+                        "lon": 2.0,
+                        "tags": {"name": f"Recovered {calls['count']}"},
+                    }
+                ]
+            }
+
+        with patch("lead_hunter.providers.osm._fetch", side_effect=fake_fetch):
+            rows = _fetch_tile_rows(
+                0.0, 0.0, 1.0, 1.0,
+                "dentist", "Test City", "Test Country",
+                timeout=1, max_depth=1,
+            )
+
+        self.assertGreater(len(rows), 0)
+        self.assertGreater(calls["count"], 1)
 
     def test_social_handle_becomes_url(self):
         self.assertEqual(
