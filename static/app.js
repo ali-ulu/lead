@@ -6,17 +6,17 @@ let leads = [];
 let websiteFilter = '';
 let socialOnly = false;
 let draftText = '';
-let currentLang = localStorage.getItem('nishanLang') || 'en';
+let currentLang = localStorage.getItem('leadscoutLang') || localStorage.getItem('nishanLang') || 'en';
 let lastAudit = null;
-let activeIds = JSON.parse(localStorage.getItem('nishanActiveIds') || '[]');
-let searchHistory = JSON.parse(localStorage.getItem('nishanHistory') || '[]');
+let activeIds = JSON.parse(localStorage.getItem('leadscoutActiveIds') || localStorage.getItem('nishanActiveIds') || '[]');
+let searchHistory = JSON.parse(localStorage.getItem('leadscoutHistory') || localStorage.getItem('nishanHistory') || '[]');
 
 const I18N = {
   en:{
-    brandTagline:'Local business scout',language:'Language',exportCsv:'Export CSV',clearHistory:'Clear history',recentSearches:'Recent searches',confirmClearHistory:'Clear saved searches and all locally cached leads/pipeline data?',historyCleared:'Search history and local lead cache cleared.',noActiveSearch:'Run or reopen a search first.',eyebrow:'FIND THE GAP',
+    brandTagline:'Local business scout',language:'Language',exportXlsx:'Excel',exportCsv:'CSV',clearHistory:'Clear history',recentSearches:'Recent searches',confirmClearHistory:'Clear saved searches and all locally cached leads/pipeline data?',historyCleared:'Search history and local lead cache cleared.',noActiveSearch:'Run or reopen a search first.',eyebrow:'FIND THE GAP',
     heroTitle:'Find businesses that are ready for a better web presence.',
     heroBody:'Search any market, spot missing or weak websites, collect contact and social channels, then move the best opportunities into outreach.',
-    searchKicker:'SEARCH MARKET',searchTitle:'Where should Nishan look?',searchHelp:'Choose a city, industry and radius. No API key required.',
+    searchKicker:'SEARCH MARKET',searchTitle:'Where should LeadScout look?',searchHelp:'Choose a city, industry and radius. No API key required.',
     country:'Country',cityArea:'City / area',industry:'Industry',radius:'Radius',findLeads:'Find leads',
     resultsKicker:'OPPORTUNITIES',resultsTitle:'Best leads first.',all:'All',noSite:'No site found',weakSite:'Weak site',hasSocial:'Has social',
     score:'Score',allStages:'All stages',stageNew:'New',stageReviewed:'Reviewed',stageContacted:'Contacted',stageReplied:'Replied',
@@ -37,10 +37,10 @@ const I18N = {
     searchRequired:'City / area and industry are required.',added:'{n} businesses added.'
   },
   tr:{
-    brandTagline:'Yerel işletme avcısı',language:'Dil',exportCsv:'CSV dışa aktar',clearHistory:'Geçmişi temizle',recentSearches:'Son aramalar',confirmClearHistory:'Kayıtlı aramaları ve yerel lead/pipeline verilerini temizlemek istiyor musun?',historyCleared:'Arama geçmişi ve yerel lead cache temizlendi.',noActiveSearch:'Önce bir arama yap veya geçmişten bir arama aç.',eyebrow:'FIRSATI BUL',
+    brandTagline:'Yerel işletme avcısı',language:'Dil',exportXlsx:'Excel',exportCsv:'CSV',clearHistory:'Geçmişi temizle',recentSearches:'Son aramalar',confirmClearHistory:'Kayıtlı aramaları ve yerel lead/pipeline verilerini temizlemek istiyor musun?',historyCleared:'Arama geçmişi ve yerel lead cache temizlendi.',noActiveSearch:'Önce bir arama yap veya geçmişten bir arama aç.',eyebrow:'FIRSATI BUL',
     heroTitle:'Daha iyi bir web varlığına hazır işletmeleri bul.',
     heroBody:'İstediğin pazarı tara, sitesi olmayan veya zayıf olan işletmeleri ayır, iletişim ve sosyal kanalları topla, en iyi fırsatları satış akışına taşı.',
-    searchKicker:'PAZAR ARA',searchTitle:'Nishan nerede arasın?',searchHelp:'Şehir, sektör ve yarıçap seç. API anahtarı gerekmez.',
+    searchKicker:'PAZAR ARA',searchTitle:'LeadScout nerede arasın?',searchHelp:'Şehir, sektör ve yarıçap seç. API anahtarı gerekmez.',
     country:'Ülke',cityArea:'Şehir / bölge',industry:'Sektör',radius:'Yarıçap',findLeads:'Lead bul',
     resultsKicker:'FIRSATLAR',resultsTitle:'En iyi leadler önce.',all:'Tümü',noSite:'Site bulunamadı',weakSite:'Zayıf site',hasSocial:'Sosyal hesabı var',
     score:'Skor',allStages:'Tüm aşamalar',stageNew:'Yeni',stageReviewed:'İncelendi',stageContacted:'İletişim',stageReplied:'Cevap',
@@ -61,10 +61,10 @@ const I18N = {
     searchRequired:'Şehir / bölge ve sektör gerekli.',added:'{n} işletme eklendi.'
   },
   ur:{
-    brandTagline:'مقامی کاروبار تلاش کریں',language:'زبان',exportCsv:'CSV ایکسپورٹ',clearHistory:'ہسٹری صاف کریں',recentSearches:'حالیہ تلاشیں',confirmClearHistory:'محفوظ تلاشیں اور مقامی لیڈ/پائپ لائن ڈیٹا صاف کریں؟',historyCleared:'تلاش کی ہسٹری اور مقامی لیڈ کیش صاف ہوگئی۔',noActiveSearch:'پہلے نئی تلاش کریں یا حالیہ تلاش کھولیں۔',eyebrow:'موقع تلاش کریں',
+    brandTagline:'مقامی کاروبار تلاش کریں',language:'زبان',exportXlsx:'Excel',exportCsv:'CSV',clearHistory:'ہسٹری صاف کریں',recentSearches:'حالیہ تلاشیں',confirmClearHistory:'محفوظ تلاشیں اور مقامی لیڈ/پائپ لائن ڈیٹا صاف کریں؟',historyCleared:'تلاش کی ہسٹری اور مقامی لیڈ کیش صاف ہوگئی۔',noActiveSearch:'پہلے نئی تلاش کریں یا حالیہ تلاش کھولیں۔',eyebrow:'موقع تلاش کریں',
     heroTitle:'ایسے کاروبار تلاش کریں جنہیں بہتر ویب موجودگی کی ضرورت ہے۔',
     heroBody:'کسی بھی مارکیٹ میں تلاش کریں، کمزور یا غائب ویب سائٹس دیکھیں، رابطہ اور سوشل چینلز جمع کریں، پھر بہترین مواقع کو آؤٹ ریچ میں لے جائیں۔',
-    searchKicker:'مارکیٹ تلاش کریں',searchTitle:'نشان کہاں تلاش کرے؟',searchHelp:'شہر، شعبہ اور دائرہ منتخب کریں۔ API key کی ضرورت نہیں۔',
+    searchKicker:'مارکیٹ تلاش کریں',searchTitle:'LeadScout کہاں تلاش کرے؟',searchHelp:'شہر، شعبہ اور دائرہ منتخب کریں۔ API key کی ضرورت نہیں۔',
     country:'ملک',cityArea:'شہر / علاقہ',industry:'کاروباری شعبہ',radius:'دائرہ',findLeads:'لیڈز تلاش کریں',
     resultsKicker:'مواقع',resultsTitle:'بہترین لیڈز پہلے۔',all:'سب',noSite:'ویب سائٹ نہیں ملی',weakSite:'کمزور سائٹ',hasSocial:'سوشل موجود',
     score:'اسکور',allStages:'تمام مراحل',stageNew:'نیا',stageReviewed:'جائزہ لیا',stageContacted:'رابطہ کیا',stageReplied:'جواب آیا',
@@ -85,10 +85,10 @@ const I18N = {
     searchRequired:'شہر / علاقہ اور شعبہ ضروری ہیں۔',added:'{n} کاروبار شامل ہوئے۔'
   },
   sd:{
-    brandTagline:'مقامي ڪاروبار ڳوليو',language:'ٻولي',exportCsv:'CSV ايڪسپورٽ',clearHistory:'تاريخ صاف ڪريو',recentSearches:'تازيون ڳولائون',confirmClearHistory:'محفوظ ڳولائون ۽ مقامي ليڊ/پائپ لائن ڊيٽا صاف ڪجي؟',historyCleared:'ڳولا تاريخ ۽ مقامي ليڊ ڪيش صاف ٿي وئي.',noActiveSearch:'پهرين ڳولا ڪريو يا تازو ڳولا کوليو.',eyebrow:'موقعو ڳوليو',
+    brandTagline:'مقامي ڪاروبار ڳوليو',language:'ٻولي',exportXlsx:'Excel',exportCsv:'CSV',clearHistory:'تاريخ صاف ڪريو',recentSearches:'تازيون ڳولائون',confirmClearHistory:'محفوظ ڳولائون ۽ مقامي ليڊ/پائپ لائن ڊيٽا صاف ڪجي؟',historyCleared:'ڳولا تاريخ ۽ مقامي ليڊ ڪيش صاف ٿي وئي.',noActiveSearch:'پهرين ڳولا ڪريو يا تازو ڳولا کوليو.',eyebrow:'موقعو ڳوليو',
     heroTitle:'اهي ڪاروبار ڳوليو جن کي بهتر ويب موجودگي جي ضرورت آهي.',
     heroBody:'ڪنهن به مارڪيٽ ۾ ڳوليو، ڪمزور يا نه مليل ويب سائيٽون ڏسو، رابطا ۽ سوشل چينل گڏ ڪريو ۽ بهتر موقعن کي آوٽ ريچ ڏانهن وٺي وڃو.',
-    searchKicker:'مارڪيٽ ڳوليو',searchTitle:'نشان ڪٿي ڳولي؟',searchHelp:'شهر، ڪاروباري شعبي ۽ دائري کي چونڊيو. API key جي ضرورت ناهي.',
+    searchKicker:'مارڪيٽ ڳوليو',searchTitle:'LeadScout ڪٿي ڳولي؟',searchHelp:'شهر، ڪاروباري شعبي ۽ دائري کي چونڊيو. API key جي ضرورت ناهي.',
     country:'ملڪ',cityArea:'شهر / علائقو',industry:'ڪاروباري شعبو',radius:'دائرو',findLeads:'ليڊ ڳوليو',
     resultsKicker:'موقعا',resultsTitle:'بهترين ليڊ پهرين.',all:'سڀ',noSite:'ويب سائيٽ نه ملي',weakSite:'ڪمزور سائيٽ',hasSocial:'سوشل موجود',
     score:'اسڪور',allStages:'سڀ مرحلا',stageNew:'نئون',stageReviewed:'جائزو ورتو',stageContacted:'رابطو ڪيو',stageReplied:'جواب آيو',
@@ -131,7 +131,7 @@ function t(key,vars={}){
 
 function applyLanguage(lang){
   currentLang=I18N[lang]?lang:'en';
-  localStorage.setItem('nishanLang',currentLang);
+  localStorage.setItem('leadscoutLang',currentLang);
   document.documentElement.lang=currentLang;
   document.documentElement.dir=['ur','sd'].includes(currentLang)?'rtl':'ltr';
   $('language').value=currentLang;
@@ -244,8 +244,8 @@ function renderTable(){
 }
 
 function saveHistory(){
-  localStorage.setItem('nishanHistory',JSON.stringify(searchHistory));
-  localStorage.setItem('nishanActiveIds',JSON.stringify(activeIds));
+  localStorage.setItem('leadscoutHistory',JSON.stringify(searchHistory));
+  localStorage.setItem('leadscoutActiveIds',JSON.stringify(activeIds));
 }
 
 function renderRecentSearches(){
@@ -263,7 +263,7 @@ function renderRecentSearches(){
     $('category').value=item.category||'';
     $('radius_km').value=String(item.radius_km||20);
     activeIds=Array.isArray(item.ids)?item.ids:[];
-    localStorage.setItem('nishanSearch',JSON.stringify({
+    localStorage.setItem('leadscoutSearch',JSON.stringify({
       country:item.country||'',city:item.city||'',category:item.category||'',radius_km:item.radius_km||20
     }));
     saveHistory();
@@ -301,7 +301,7 @@ async function clearHistory(){
     currentLead=null;
     draftText='';
     lastAudit=null;
-    ['nishanSearch','nishanHistory','nishanActiveIds','leadHunterSearch'].forEach(key=>localStorage.removeItem(key));
+    ['leadscoutSearch','leadscoutHistory','leadscoutActiveIds','nishanSearch','nishanHistory','nishanActiveIds','nishanLang','leadHunterSearch'].forEach(key=>localStorage.removeItem(key));
     $('country').value='';
     $('city').value='';
     $('category').value='';
@@ -323,7 +323,7 @@ async function discover(){
   const radius_km=Number($('radius_km').value||20);
   if(!city||!category){toast(t('searchRequired'),true);return;}
 
-  localStorage.setItem('nishanSearch',JSON.stringify({country,city,category,radius_km}));
+  localStorage.setItem('leadscoutSearch',JSON.stringify({country,city,category,radius_km}));
   const btn=$('discover');
   btn.disabled=true;
   btn.classList.add('busy');
@@ -604,7 +604,7 @@ async function init(){
   categories=data.items||[];
   applyLanguage(currentLang);
 
-  const saved=JSON.parse(localStorage.getItem('nishanSearch')||localStorage.getItem('leadHunterSearch')||'{}');
+  const saved=JSON.parse(localStorage.getItem('leadscoutSearch')||localStorage.getItem('nishanSearch')||localStorage.getItem('leadHunterSearch')||'{}');
   ['country','city','category','radius_km'].forEach(key=>{
     if(saved[key]!=null&&$(key)) $(key).value=saved[key];
   });
