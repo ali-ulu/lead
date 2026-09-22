@@ -176,6 +176,14 @@ def list_leads(filters: dict[str, str]) -> list[dict[str, Any]]:
         if value:
             try: clauses.append(f"{field}>=?"); args.append(int(value))
             except ValueError: pass
+    for field in ("seo_score","aeo_score","geo_score","ai_visibility_score"):
+        value=filters.get("max_"+field,"").strip()
+        if value:
+            try:
+                clauses.append(f"{field} IS NOT NULL AND {field}<=?")
+                args.append(int(value))
+            except ValueError:
+                pass
     sql=f"SELECT * FROM leads WHERE {' AND '.join(clauses)} ORDER BY lead_score DESC, commercial_score DESC, updated_at DESC, name ASC"
     with connect() as conn:
         return [_decode(r) for r in conn.execute(sql,args).fetchall() if r]
