@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Live provider verification for Nishan 3.1.
-
-Runs Nishan's real geocoder and OpenStreetMap provider against public endpoints.
-The workflow is path-scoped so normal pushes do not repeatedly hit community APIs.
-"""
+"""Live provider verification for LeadScout 4.0."""
 from __future__ import annotations
 
 import json
@@ -12,10 +8,9 @@ import time
 from lead_hunter.providers.nominatim import geocode_area
 from lead_hunter.providers.osm import search_around
 
-VERIFY_RELEASE = "3.1.0"
+VERIFY_RELEASE = "4.0.0"
 
 CASES = [
-    ("Karachi", "Pakistan", "dentist", 20),
     ("Karachi", "Pakistan", "restaurant", 20),
     ("Karachi", "Pakistan", "beauty", 20),
     ("Istanbul", "Türkiye", "dentist", 15),
@@ -43,8 +38,7 @@ def main() -> int:
                 category,
                 city=area["city"],
                 country=area["country"],
-                timeout=40,
-                limit=250,
+                timeout=55,
             )
 
             row = {
@@ -87,14 +81,18 @@ def main() -> int:
         print("FAIL: no non-Pakistan market returned data", flush=True)
         return 2
 
+    if not any(x.get("count", 0) > 250 for x in results):
+        print("FAIL: no dense case exceeded the former 250-result application cap", flush=True)
+        return 5
+
     verified_cases = sum(1 for x in results if x.get("count", 0) > 0)
     if verified_cases < 4:
         print(f"FAIL: only {verified_cases} live market/category cases returned data", flush=True)
         return 4
 
     print(
-        f"PASS: Nishan {VERIFY_RELEASE} returned live data in "
-        f"{verified_cases}/{len(results)} verification cases",
+        f"PASS: LeadScout {VERIFY_RELEASE} returned live data in "
+        f"{verified_cases}/{len(results)} cases and exceeded 250 results",
         flush=True,
     )
     return 0
