@@ -123,8 +123,12 @@
             <input id="min_score" type="number" min="0" max="100" value="0">
           </label>
           <label class="score-filter">
-            <span>Gap</span>
+            <span>Gap ≥</span>
             <input id="min_gap" type="number" min="0" max="100" value="0" title="Minimum Opportunity Gap">
+          </label>
+          <label class="score-filter">
+            <span>AIO ≤</span>
+            <input id="max_aio" type="number" min="0" max="100" value="0" title="Maximum AI Visibility readiness score; 0 disables">
           </label>
 
           <select id="pipeline_status" aria-label="Pipeline stage">
