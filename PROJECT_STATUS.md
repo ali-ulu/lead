@@ -1,25 +1,37 @@
-# Project Status — Ready for Use
+# Nishan — Project Status
 
-**Version:** 1.0.0
-
-The repository contains a complete local MVP that can be used immediately with no paid service and no API key.
+**Version:** 3.0.0  
+**State:** Ready for local use
 
 Implemented:
 
-- Live global location lookup
-- Live local-business discovery from OpenStreetMap/Overpass
+- Global live location lookup
+- OpenStreetMap / Overpass business discovery
 - 26 business categories
-- Adjustable 10/20/30/50 km search radius
-- Local SQLite persistence and deduplication
-- Missing/unknown/weak/healthy website states
+- 10 / 20 / 30 / 50 km search radius
+- SQLite persistence and deduplication
+- Missing / unknown / weak / healthy website states
 - Public website audit and score recalculation
-- Explainable lead scoring
-- EN/TR/DE outreach drafts
-- Contact links and map link
+- Explainable opportunity scoring
+- English / Turkish / Urdu / Sindhi UI
+- RTL support for Urdu and Sindhi
+- EN / TR / UR / SD outreach drafts
+- Social-channel collection from OSM and business websites:
+  - Instagram
+  - Facebook
+  - LinkedIn
+  - X / Twitter
+  - YouTube
+  - TikTok
+  - Telegram
+  - WhatsApp
+- Social-only lead filter
+- Contact/map links
 - Pipeline states
 - Do-not-contact handling
 - CSV export
-- Windows/macOS/Linux launchers
+- Windows / macOS / Linux launchers
 - CI + unit tests
+- Private-network and redirect protection in website audit
 
-Known data limitation: open-data coverage varies by market. A missing website/email/phone means the selected source did not provide it; it is not guaranteed to be absent everywhere online.
+Known data limitation: open-data coverage varies by market. Missing website, email, phone or social data means the reviewed sources did not provide it; it does not prove the channel does not exist elsewhere online.
