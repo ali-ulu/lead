@@ -57,10 +57,19 @@ def main() -> int:
 
     print("SUMMARY", json.dumps(results, ensure_ascii=False), flush=True)
 
+    pakistan = [x for x in results if x["country"] == "Pakistan"]
     other_markets = [x for x in results if x["country"] != "Pakistan"]
+    if not any(x.get("count", 0) > 0 for x in pakistan):
+        print("FAIL: Karachi/Pakistan returned no live business data", flush=True)
+        return 3
     if not any(x.get("count", 0) > 0 for x in other_markets):
         print("FAIL: no non-Pakistan market returned data", flush=True)
         return 2
+    verified_markets = sum(1 for x in results if x.get("count", 0) > 0)
+    if verified_markets < 4:
+        print(f"FAIL: only {verified_markets} live market/category cases returned data", flush=True)
+        return 4
+    print(f"PASS: {verified_markets}/{len(results)} live cases returned data", flush=True)
     return 0
 
 if __name__ == "__main__":
