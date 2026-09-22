@@ -1,0 +1,347 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "LeadScout Agent API",
+    "version": "4.0.0",
+    "description": "Local-first API for searching businesses, inspecting leads, auditing public websites, drafting outreach, updating pipeline stages, and exporting lead data."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8787"
+    }
+  ],
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "summary": "Health and capabilities",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/categories": {
+      "get": {
+        "summary": "List supported business categories",
+        "responses": {
+          "200": {
+            "description": "Category list"
+          }
+        }
+      }
+    },
+    "/api/v1/search": {
+      "post": {
+        "summary": "Search a city/area for businesses",
+        "description": "No application-level result cap is applied unless max_results is explicitly provided. The upstream provider may still impose operational limits.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "city",
+                  "category"
+                ],
+                "properties": {
+                  "country": {
+                    "type": "string"
+                  },
+                  "city": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "radius_km": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "default": 20
+                  },
+                  "max_results": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Optional explicit cap. Omit for no app cap."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Search result with lead IDs"
+          }
+        }
+      }
+    },
+    "/api/v1/leads": {
+      "get": {
+        "summary": "List/filter locally stored leads",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated lead IDs"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "city",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "website_status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "missing",
+                "unknown",
+                "weak",
+                "healthy"
+              ]
+            }
+          },
+          {
+            "name": "pipeline_status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "min_score",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "has_social",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lead list"
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{lead_id}": {
+      "get": {
+        "summary": "Get one lead",
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lead"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{lead_id}/audit": {
+      "post": {
+        "summary": "Audit the lead website and enrich social channels",
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lead and audit result"
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{lead_id}/message": {
+      "get": {
+        "summary": "Generate a human-review outreach draft",
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "en",
+                "tr",
+                "ur",
+                "sd",
+                "de"
+              ],
+              "default": "en"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Draft message"
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{lead_id}/status": {
+      "post": {
+        "summary": "Update pipeline stage",
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "new",
+                      "reviewed",
+                      "contacted",
+                      "replied",
+                      "proposal",
+                      "won",
+                      "lost"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated lead"
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{lead_id}/dnc": {
+      "post": {
+        "summary": "Mark lead do-not-contact",
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated state"
+          }
+        }
+      }
+    },
+    "/api/v1/export.csv": {
+      "get": {
+        "summary": "Download filtered leads as CSV",
+        "responses": {
+          "200": {
+            "description": "CSV file"
+          }
+        }
+      }
+    },
+    "/api/v1/export.xlsx": {
+      "get": {
+        "summary": "Download filtered leads as Excel XLSX",
+        "responses": {
+          "200": {
+            "description": "XLSX file"
+          }
+        }
+      }
+    },
+    "/api/v1/clear": {
+      "post": {
+        "summary": "Clear local lead cache/history data",
+        "responses": {
+          "200": {
+            "description": "Cleared"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Optional. Set LEADSCOUT_API_TOKEN to require it on /api/v1/*."
+      }
+    }
+  }
+}
