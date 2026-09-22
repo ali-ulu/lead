@@ -1,5 +1,8 @@
 [project]
-name = "nishan-local-business-scout"
-version = "3.1.0"
-description = "Global local-business opportunity discovery with website audits, social-channel enrichment and multilingual outreach"
+name = "leadscout-local-business-scout"
+version = "4.0.0"
+description = "Global local-business discovery, website audits, social enrichment, agent API and MCP"
 requires-python = ">=3.11"
+
+[project.optional-dependencies]
+agents = ["mcp>=2,<3"]
