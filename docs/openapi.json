@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "LeadScout Agent API",
-    "version": "6.0.0",
-    "description": "LeadScout 6 API for multi-source lead discovery, web verification, reputation enrichment, CRM, outreach and agents."
+    "version": "7.0.0",
+    "description": "LeadScout 7 API for multi-source lead discovery, verification, CRM, outreach, agents and evidence-based SEO/AEO/GEO/AI visibility scoring."
   },
   "servers": [
     {
@@ -145,6 +145,61 @@
                 "1"
               ]
             }
+          },
+          {
+            "name": "min_seo_score",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "description": "Minimum SEO readiness score"
+          },
+          {
+            "name": "min_aeo_score",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "description": "Minimum AEO readiness score"
+          },
+          {
+            "name": "min_geo_score",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "description": "Minimum GEO readiness score"
+          },
+          {
+            "name": "min_ai_visibility_score",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "description": "Minimum AI Visibility readiness score"
+          },
+          {
+            "name": "min_opportunity_gap_score",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "description": "Minimum Opportunity Gap score"
           }
         ],
         "responses": {
