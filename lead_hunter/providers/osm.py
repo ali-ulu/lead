@@ -8,7 +8,7 @@ OVERPASS_URLS = (
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
 )
-USER_AGENT = "AI-ULU-Lead-Hunter/1.0 (local business research tool)"
+USER_AGENT = "Nishan/3.0 (local business research tool)"
 
 CATEGORY_FILTERS: dict[str, list[tuple[str, str]]] = {
     "dentist": [("amenity", "dentist")],
@@ -39,10 +39,49 @@ CATEGORY_FILTERS: dict[str, list[tuple[str, str]]] = {
     "florist": [("shop", "florist")],
 }
 
+SOCIAL_TAGS: dict[str, tuple[tuple[str, ...], str]] = {
+    "instagram": (("contact:instagram","instagram","brand:instagram","operator:instagram"), "https://instagram.com/"),
+    "facebook": (("contact:facebook","facebook","brand:facebook","operator:facebook"), "https://facebook.com/"),
+    "linkedin": (("contact:linkedin","linkedin","brand:linkedin","operator:linkedin"), "https://linkedin.com/"),
+    "x": (("contact:twitter","twitter","contact:x","x"), "https://x.com/"),
+    "youtube": (("contact:youtube","youtube","brand:youtube"), "https://youtube.com/"),
+    "tiktok": (("contact:tiktok","tiktok"), "https://tiktok.com/@"),
+    "telegram": (("contact:telegram","telegram"), "https://t.me/"),
+    "whatsapp": (("contact:whatsapp","whatsapp"), "https://wa.me/"),
+}
+
 def _tag(tags: dict[str, Any], *names: str):
     for name in names:
         if tags.get(name):
             return tags[name]
+    return None
+
+def _normalize_social(value: str, prefix: str) -> str:
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if value.startswith(("http://","https://")):
+        return value
+    handle = value.lstrip("@/ ")
+    if prefix.endswith("wa.me/"):
+        handle = "".join(ch for ch in handle if ch.isdigit())
+    return prefix + handle
+
+def _socials(tags: dict[str, Any]) -> dict[str, str]:
+    found: dict[str, str] = {}
+    for platform, (keys, prefix) in SOCIAL_TAGS.items():
+        value = _tag(tags, *keys)
+        if value:
+            url = _normalize_social(str(value), prefix)
+            if url:
+                found[platform] = url
+    return found
+
+def _social(tags: dict[str, Any]):
+    socials = _socials(tags)
+    for platform in ("instagram","facebook","linkedin","x","youtube","tiktok","whatsapp","telegram"):
+        if socials.get(platform):
+            return socials[platform]
     return None
 
 def _build_query(south: float, west: float, north: float, east: float, category: str, timeout: int) -> str:
@@ -50,9 +89,7 @@ def _build_query(south: float, west: float, north: float, east: float, category:
     if not filters:
         raise ValueError(f"Unsupported category: {category}")
     bbox = f"{south},{west},{north},{east}"
-    parts = []
-    for key, value in filters:
-        parts.append(f'nwr["{key}"="{value}"]({bbox});')
+    parts = [f'nwr["{key}"="{value}"]({bbox});' for key, value in filters]
     return f'[out:json][timeout:{timeout}];({"".join(parts)});out center tags 250;'
 
 def _build_around_query(lat: float, lon: float, radius_m: int, category: str, timeout: int) -> str:
@@ -60,32 +97,19 @@ def _build_around_query(lat: float, lon: float, radius_m: int, category: str, ti
     if not filters:
         raise ValueError(f"Unsupported category: {category}")
     radius_m = max(1000, min(50000, int(radius_m)))
-    parts = []
-    for key, value in filters:
-        parts.append(f'nwr["{key}"="{value}"](around:{radius_m},{lat},{lon});')
+    parts = [f'nwr["{key}"="{value}"](around:{radius_m},{lat},{lon});' for key, value in filters]
     return f'[out:json][timeout:{timeout}];({"".join(parts)});out center tags 250;'
-
-def _social(tags: dict[str, Any]):
-    pairs = [
-        ("contact:instagram", "https://instagram.com/"), ("instagram", "https://instagram.com/"),
-        ("contact:facebook", "https://facebook.com/"), ("facebook", "https://facebook.com/"),
-        ("contact:linkedin", "https://linkedin.com/in/"),
-    ]
-    for key, prefix in pairs:
-        value = (tags.get(key) or "").strip()
-        if not value:
-            continue
-        if value.startswith("http://") or value.startswith("https://"):
-            return value
-        return prefix + value.lstrip("@/")
-    return None
 
 def _fetch(query: str, timeout: int) -> dict[str, Any]:
     payload = urllib.parse.urlencode({"data": query}).encode()
     last_error: Exception | None = None
     for endpoint in OVERPASS_URLS:
         try:
-            req = urllib.request.Request(endpoint, data=payload, headers={"User-Agent": USER_AGENT, "Content-Type": "application/x-www-form-urlencoded"})
+            req = urllib.request.Request(
+                endpoint,
+                data=payload,
+                headers={"User-Agent": USER_AGENT, "Content-Type": "application/x-www-form-urlencoded"},
+            )
             with urllib.request.urlopen(req, timeout=timeout + 8) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except Exception as exc:
@@ -95,17 +119,19 @@ def _fetch(query: str, timeout: int) -> dict[str, Any]:
 def _normalize(data: dict[str, Any], category: str, city: str, country: str, limit: int) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for e in data.get("elements", []):
-        tags = e.get("tags") or {}
+    for element in data.get("elements", []):
+        tags = element.get("tags") or {}
         name = tags.get("name") or tags.get("brand")
         if not name:
             continue
-        source_id = f"{e.get('type')}:{e.get('id')}"
+        source_id = f"{element.get('type')}:{element.get('id')}"
         if source_id in seen:
             continue
         seen.add(source_id)
-        center = e.get("center") or {}
+        center = element.get("center") or {}
         website = _tag(tags, "website", "contact:website", "url")
+        socials = _socials(tags)
+        primary_social = next(iter(socials.values()), None)
         out.append({
             "source": "osm",
             "source_id": source_id,
@@ -113,12 +139,13 @@ def _normalize(data: dict[str, Any], category: str, city: str, country: str, lim
             "country": tags.get("addr:country") or country,
             "city": _tag(tags, "addr:city", "addr:town", "addr:village", "addr:municipality") or city,
             "category": category,
-            "latitude": e.get("lat", center.get("lat")),
-            "longitude": e.get("lon", center.get("lon")),
+            "latitude": element.get("lat", center.get("lat")),
+            "longitude": element.get("lon", center.get("lon")),
             "website": website,
             "phone": _tag(tags, "phone", "contact:phone", "mobile", "contact:mobile"),
             "email": _tag(tags, "email", "contact:email"),
-            "social_url": _social(tags),
+            "social_url": primary_social,
+            "social_links": socials,
             "website_status": "unknown" if website else "missing",
             "data_confidence": "medium",
         })
