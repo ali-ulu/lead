@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS leads (
     phone TEXT,
     email TEXT,
     social_url TEXT,
+    social_links TEXT NOT NULL DEFAULT '{}',
     website_status TEXT NOT NULL DEFAULT 'unknown',
     performance_score INTEGER,
     seo_score INTEGER,
