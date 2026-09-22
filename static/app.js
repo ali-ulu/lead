@@ -157,7 +157,7 @@ function visibilityScoreHtml(lead){
     ["SEO",lead.seo_score],
     ["AEO",lead.aeo_score],
     ["GEO",lead.geo_score],
-    ["AI",lead.ai_visibility_score],
+    ["AIO",lead.ai_visibility_score],
     ["GAP",lead.opportunity_gap_score],
   ];
   return '<div class="visibility-grid">'+values.map(([label,value])=>{
@@ -248,7 +248,7 @@ async function refreshCurrent(tab){ if(!currentLead)return; currentLead=await ap
 async function verifyLead(id){try{const d=await api("/api/v1/leads/"+id+"/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});currentLead=d.lead;await refreshCurrent("overview");toast(d.verified?"Verified":"Verification checked");}catch(e){toast(e.message,true);}}
 async function enrichLead(id){try{await api("/api/v1/leads/"+id+"/enrich",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});await refreshCurrent("overview");toast("Enriched");}catch(e){toast(e.message,true);}}
 async function enrichReputation(id){try{const d=await api("/api/v1/leads/"+id+"/reputation",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});currentLead=d.lead||currentLead;await refreshCurrent("overview");const r=d.reputation||{};toast(r.matched?("Rating "+String(r.rating??"—")+" · "+String(r.review_count??0)+" reviews"):(r.reason||"No reputation match"));}catch(e){toast(e.message,true);}}
-async function auditLead(id){try{const d=await api("/api/v1/leads/"+id+"/audit",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});currentLead=d.lead;renderLead(currentLead);document.querySelector('[data-tab="audit"]').click();const n=$("auditResult");if(n)n.innerHTML='<p>'+esc(d.audit.audit_engine||"heuristic")+' · perf '+esc(d.audit.performance_score??"—")+' · SEO '+esc(d.audit.seo_score??"—")+' · AEO '+esc(d.audit.aeo_score??"—")+' · GEO '+esc(d.audit.geo_score??"—")+' · AI '+esc(d.audit.ai_visibility_score??"—")+'</p>';await loadLeads();}catch(e){toast(e.message,true);}}
+async function auditLead(id){try{const d=await api("/api/v1/leads/"+id+"/audit",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});currentLead=d.lead;renderLead(currentLead);document.querySelector('[data-tab="audit"]').click();const n=$("auditResult");if(n)n.innerHTML='<p>'+esc(d.audit.audit_engine||"heuristic")+' · perf '+esc(d.audit.performance_score??"—")+' · SEO '+esc(d.audit.seo_score??"—")+' · AEO '+esc(d.audit.aeo_score??"—")+' · GEO '+esc(d.audit.geo_score??"—")+' · AIO '+esc(d.audit.ai_visibility_score??"—")+'</p>';await loadLeads();}catch(e){toast(e.message,true);}}
 async function setStage(id,status){try{const d=await api("/api/v1/leads/"+id+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status})});currentLead=d.lead;await refreshCurrent("overview");}catch(e){toast(e.message,true);}}
 async function doNotContact(id){if(!confirm("Mark do-not-contact?"))return;try{await api("/api/v1/leads/"+id+"/dnc",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});closeDrawer();await loadLeads();}catch(e){toast(e.message,true);}}
 async function draft(id,l){try{const d=await api("/api/v1/leads/"+id+"/message?lang="+encodeURIComponent(l));draftText=d.message||"";$("message").textContent=draftText;$("message").dir=(l==="ur"||l==="sd")?"rtl":"ltr";$("copyMessage").disabled=!draftText;}catch(e){toast(e.message,true);}}
