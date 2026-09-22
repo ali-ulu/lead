@@ -13,6 +13,8 @@ jobs:
   live-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    env:
+      PYTHONPATH: .
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
