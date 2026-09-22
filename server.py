@@ -1,6 +1,5 @@
 from __future__ import annotations
-import csv
-import io
+
 import json
 import mimetypes
 import os
@@ -11,27 +10,48 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from lead_hunter.audit import audit_url
-from lead_hunter.db import clear_all, get_lead, initialize, list_leads, update_lead, upsert_leads
-from lead_hunter.outreach import build_message
-from lead_hunter.providers.nominatim import geocode_area
-from lead_hunter.providers.osm import CATEGORY_FILTERS, search_around
+from lead_hunter.db import clear_all, get_lead, initialize, list_leads
+from lead_hunter.exporters import csv_bytes, xlsx_bytes
+from lead_hunter.providers.osm import CATEGORY_FILTERS
+from lead_hunter.services import (
+    audit_lead,
+    discover_businesses,
+    draft_outreach,
+    mark_do_not_contact,
+    set_pipeline_stage,
+)
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
-HOST = os.environ.get("LEAD_HUNTER_HOST", "127.0.0.1")
-PORT = int(os.environ.get("LEAD_HUNTER_PORT", "8787"))
+HOST = os.environ.get("LEADSCOUT_HOST", os.environ.get("LEAD_HUNTER_HOST", "127.0.0.1"))
+PORT = int(os.environ.get("LEADSCOUT_PORT", os.environ.get("LEAD_HUNTER_PORT", "8787")))
+API_TOKEN = os.environ.get("LEADSCOUT_API_TOKEN", "").strip()
+
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "Nishan/3.1"
+    server_version = "LeadScout/4.0"
 
     def log_message(self, fmt, *args):
-        print(f"[nishan] {self.address_string()} - {fmt % args}")
+        print(f"[leadscout] {self.address_string()} - {fmt % args}")
+
+    def _authorized(self, path: str) -> bool:
+        if not API_TOKEN or not path.startswith("/api/v1/"):
+            return True
+        return self.headers.get("Authorization", "") == f"Bearer {API_TOKEN}"
 
     def _json(self, payload, status=200):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _bytes(self, body: bytes, content_type: str, filename: str):
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -46,147 +66,170 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return {}
 
+    @staticmethod
+    def _query(parsed):
+        return {k: v[0] for k, v in parse_qs(parsed.query).items() if v}
+
+    @staticmethod
+    def _lead_id(path: str, suffix: str = "") -> int:
+        clean = path
+        if suffix and clean.endswith(suffix):
+            clean = clean[: -len(suffix)]
+        return int(clean.rstrip("/").rsplit("/", 1)[1])
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.end_headers()
+
     def do_GET(self):
         parsed = urlparse(self.path)
-        if parsed.path == "/api/health":
+        path = parsed.path
+
+        if not self._authorized(path):
+            return self._json({"error": "unauthorized"}, 401)
+
+        if path in {"/api/health", "/api/v1/health"}:
             return self._json({
                 "ok": True,
-                "name": "Nishan",
-                "version": "3.1.0",
+                "name": "LeadScout",
+                "version": "4.0.0",
                 "provider": "OpenStreetMap / Overpass",
                 "languages": ["en", "tr", "ur", "sd"],
+                "agent_api": "/api/v1",
+                "openapi": "/api/v1/openapi.json",
+                "mcp": "mcp_server.py",
             })
-        if parsed.path == "/api/categories":
+
+        if path in {"/api/categories", "/api/v1/categories"}:
             return self._json({"items": sorted(CATEGORY_FILTERS.keys())})
-        if parsed.path == "/api/leads":
-            query = {k: v[0] for k, v in parse_qs(parsed.query).items() if v}
-            return self._json({"items": list_leads(query)})
-        if parsed.path.startswith("/api/leads/"):
-            try:
-                lead_id = int(parsed.path.rsplit("/", 1)[1])
-            except ValueError:
-                return self._json({"error": "invalid id"}, 400)
-            lead = get_lead(lead_id)
-            return self._json(lead or {"error": "not found"}, 200 if lead else 404)
-        if parsed.path == "/api/message":
+
+        if path == "/api/v1/openapi.json":
+            spec = (ROOT / "docs" / "openapi.json").read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(spec)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(spec)
+            return
+
+        if path in {"/api/leads", "/api/v1/leads"}:
+            return self._json({"items": list_leads(self._query(parsed))})
+
+        if path in {"/api/export.csv", "/api/v1/export.csv"}:
+            rows = list_leads(self._query(parsed))
+            return self._bytes(csv_bytes(rows), "text/csv; charset=utf-8", "leadscout-leads.csv")
+
+        if path in {"/api/export.xlsx", "/api/v1/export.xlsx"}:
+            rows = list_leads(self._query(parsed))
+            return self._bytes(
+                xlsx_bytes(rows),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "leadscout-leads.xlsx",
+            )
+
+        if path == "/api/message":
             query = parse_qs(parsed.query)
             try:
                 lead_id = int(query.get("id", [""])[0])
             except ValueError:
                 return self._json({"error": "invalid id"}, 400)
-            lang = query.get("lang", ["en"])[0]
-            lang = lang if lang in {"en", "tr", "ur", "sd", "de"} else "en"
+            try:
+                return self._json(draft_outreach(lead_id, query.get("lang", ["en"])[0]))
+            except LookupError as exc:
+                return self._json({"error": str(exc)}, 404)
+
+        if path.startswith("/api/v1/leads/") and path.endswith("/message"):
+            try:
+                lead_id = self._lead_id(path, "/message")
+                lang = parse_qs(parsed.query).get("lang", ["en"])[0]
+                return self._json(draft_outreach(lead_id, lang))
+            except ValueError:
+                return self._json({"error": "invalid id"}, 400)
+            except LookupError as exc:
+                return self._json({"error": str(exc)}, 404)
+
+        if path.startswith("/api/leads/") or path.startswith("/api/v1/leads/"):
+            try:
+                lead_id = self._lead_id(path)
+            except ValueError:
+                return self._json({"error": "invalid id"}, 400)
             lead = get_lead(lead_id)
-            if not lead:
-                return self._json({"error": "not found"}, 404)
-            return self._json({"message": build_message(lead, lang)})
-        if parsed.path == "/api/export.csv":
-            query = {k: v[0] for k, v in parse_qs(parsed.query).items() if v}
-            rows = list_leads(query)
-            buf = io.StringIO()
-            fields = [
-                "id","name","country","city","category","lead_score","website_status",
-                "website","phone","email","social_links","pipeline_status","source","source_id"
-            ]
-            writer = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")
-            writer.writeheader()
-            for row in rows:
-                item = dict(row)
-                item["social_links"] = json.dumps(item.get("social_links") or {}, ensure_ascii=False)
-                writer.writerow(item)
-            body = buf.getvalue().encode("utf-8-sig")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/csv; charset=utf-8")
-            self.send_header("Content-Disposition", 'attachment; filename="nishan-leads.csv"')
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-        return self._serve_static(parsed.path)
+            return self._json(lead or {"error": "not found"}, 200 if lead else 404)
+
+        return self._serve_static(path)
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        path = parsed.path
         payload = self._body_json()
 
-        if parsed.path == "/api/discover":
-            city = str(payload.get("city") or "").strip()
-            country = str(payload.get("country") or "").strip()
-            category = str(payload.get("category") or "").strip()
-            if not city or not category:
-                return self._json({"error": "City/area and industry are required."}, 400)
-            if category not in CATEGORY_FILTERS:
-                return self._json({"error": "Unsupported industry."}, 400)
+        if not self._authorized(path):
+            return self._json({"error": "unauthorized"}, 401)
+
+        if path in {"/api/discover", "/api/v1/search"}:
             try:
-                area = geocode_area(city, country)
-                radius_km = max(3, min(50, int(payload.get("radius_km") or 20)))
-                rows = search_around(
-                    area["lat"], area["lon"], radius_km, category,
-                    city=area["city"], country=area["country"]
+                max_results = payload.get("max_results")
+                result = discover_businesses(
+                    city=str(payload.get("city") or ""),
+                    country=str(payload.get("country") or ""),
+                    category=str(payload.get("category") or ""),
+                    radius_km=int(payload.get("radius_km") or 20),
+                    max_results=int(max_results) if max_results not in (None, "", 0, "0") else None,
                 )
-                ids = upsert_leads(rows)
-                return self._json({"ok": True, "count": len(rows), "ids": ids, "area": area})
+                return self._json(result)
+            except ValueError as exc:
+                return self._json({"error": str(exc)}, 400)
             except Exception as exc:
                 return self._json({"error": str(exc)}, 502)
 
-        if parsed.path.startswith("/api/leads/") and parsed.path.endswith("/audit"):
-            parts = parsed.path.strip("/").split("/")
+        if (
+            (path.startswith("/api/leads/") or path.startswith("/api/v1/leads/"))
+            and path.endswith("/audit")
+        ):
             try:
-                lead_id = int(parts[2])
-            except Exception:
-                return self._json({"error": "invalid id"}, 400)
-            lead = get_lead(lead_id)
-            if not lead:
-                return self._json({"error": "not found"}, 404)
-            if not lead.get("website"):
-                return self._json({"error": "This lead has no website to audit."}, 400)
+                return self._json(audit_lead(self._lead_id(path, "/audit")))
+            except ValueError as exc:
+                return self._json({"error": str(exc)}, 400)
+            except LookupError as exc:
+                return self._json({"error": str(exc)}, 404)
+            except Exception as exc:
+                return self._json({"error": str(exc)}, 502)
 
-            result = audit_url(lead["website"])
-            existing_socials = lead.get("social_links") or {}
-            discovered_socials = result.get("social_links") or {}
-            merged_socials = {**existing_socials, **discovered_socials}
-            primary_social = lead.get("social_url")
-            if not primary_social and merged_socials:
-                primary_social = next(iter(merged_socials.values()))
-
-            updates = {
-                "website_status": result.get("website_status", "weak"),
-                "performance_score": result.get("performance_score"),
-                "seo_score": result.get("seo_score"),
-                "mobile_ok": result.get("mobile_ok"),
-                "has_cta": result.get("has_cta"),
-                "has_booking": result.get("has_booking"),
-                "has_https": result.get("has_https"),
-                "social_links": merged_socials,
-                "social_url": primary_social,
-            }
-            lead = update_lead(lead_id, updates)
-            return self._json({"lead": lead, "audit": result})
-
-        if parsed.path.startswith("/api/leads/") and parsed.path.endswith("/status"):
-            parts = parsed.path.strip("/").split("/")
+        if (
+            (path.startswith("/api/leads/") or path.startswith("/api/v1/leads/"))
+            and path.endswith("/status")
+        ):
             try:
-                lead_id = int(parts[2])
-            except Exception:
-                return self._json({"error": "invalid id"}, 400)
-            status = str(payload.get("status") or "").strip()
-            allowed = {"new", "reviewed", "contacted", "replied", "proposal", "won", "lost"}
-            if status not in allowed:
-                return self._json({"error": "invalid status"}, 400)
-            lead = update_lead(lead_id, {"pipeline_status": status})
-            return self._json({"lead": lead})
+                return self._json(
+                    set_pipeline_stage(
+                        self._lead_id(path, "/status"),
+                        str(payload.get("status") or "").strip(),
+                    )
+                )
+            except ValueError as exc:
+                return self._json({"error": str(exc)}, 400)
+            except LookupError as exc:
+                return self._json({"error": str(exc)}, 404)
 
-        if parsed.path.startswith("/api/leads/") and parsed.path.endswith("/dnc"):
-            parts = parsed.path.strip("/").split("/")
+        if (
+            (path.startswith("/api/leads/") or path.startswith("/api/v1/leads/"))
+            and path.endswith("/dnc")
+        ):
             try:
-                lead_id = int(parts[2])
-            except Exception:
+                return self._json(mark_do_not_contact(self._lead_id(path, "/dnc")))
+            except ValueError:
                 return self._json({"error": "invalid id"}, 400)
-            update_lead(lead_id, {"do_not_contact": 1})
-            return self._json({"ok": True})
+            except LookupError as exc:
+                return self._json({"error": str(exc)}, 404)
 
-        if parsed.path == "/api/clear":
+        if path in {"/api/clear", "/api/v1/clear"}:
             clear_all()
             return self._json({"ok": True})
+
         return self._json({"error": "not found"}, 404)
 
     def _serve_static(self, path):
@@ -205,13 +248,15 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+
 def main(open_browser: bool = False):
     initialize()
     url = f"http://{HOST}:{PORT}"
-    print(f"Nishan v3.1 ready: {url}")
+    print(f"LeadScout 4.0 ready: {url}")
     if open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
 
+
 if __name__ == "__main__":
-    main(open_browser=os.environ.get("LEAD_HUNTER_OPEN_BROWSER", "0") == "1")
+    main(open_browser=os.environ.get("LEADSCOUT_OPEN_BROWSER", "0") == "1")
