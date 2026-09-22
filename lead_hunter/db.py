@@ -100,7 +100,7 @@ def upsert_leads(rows: list[dict[str, Any]]) -> list[int]:
             lead["score_reasons"] = reasons
             lead.setdefault("pipeline_status", "new")
             lead.setdefault("engagement_status", "not_contacted")
-            lead.setdefault("source_refs", {lead.get("source","unknown"): lead.get("source_id")})
+            lead.setdefault("source_refs", {lead.get("source","unknown"): lead.get("source_id")})\n            lead.setdefault("social_links", {})\n            lead.setdefault("messaging_ids", {})\n            lead.setdefault("verification_notes", [])\n            lead.setdefault("intelligence_reasons", [])
             lead = _jsonify(lead)
             values = [lead.get(c) for c in columns]
             protected = {"source","source_id","pipeline_status","engagement_status","follow_up_at","notes"}
