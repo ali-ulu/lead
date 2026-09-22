@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: leadscout-fast-live
+  cancel-in-progress: true
+
 jobs:
   fast-live:
     runs-on: ubuntu-latest
