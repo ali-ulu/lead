@@ -1,15 +1,14 @@
-# Nishan
+# LeadScout
 
-**Nishan** is a local-first global business-opportunity scout. Pick a country, city/area, industry and radius; Nishan finds local businesses, highlights missing or weak web presence, collects available contact/social channels, audits public websites and prepares human-reviewed outreach drafts.
+**LeadScout** is a local-first business opportunity scout. Choose a country, city/area, industry and radius; LeadScout discovers local businesses, highlights missing or weak web presence, collects contact/social channels, audits public websites and prepares human-reviewed outreach drafts.
 
-## V3 highlights
+## LeadScout 4.0
 
-- New **red + white** product identity. No AI-ULU branding.
 - Global live discovery with OpenStreetMap / Overpass.
-- English, Turkish, **Urdu** and **Sindhi** interface support.
+- **No application-level 250-result cap.** Search returns the provider's complete result set unless an explicit `max_results` is requested through the agent API.
+- English, Turkish, Urdu and Sindhi interface.
 - Automatic RTL layout for Urdu and Sindhi.
-- Outreach drafts in English, Turkish, Urdu and Sindhi.
-- Multi-social capture:
+- Social-channel capture from OSM tags and public business websites:
   - Instagram
   - Facebook
   - LinkedIn
@@ -18,16 +17,17 @@
   - TikTok
   - Telegram
   - WhatsApp
-- Social channels are collected both from OpenStreetMap contact tags and, when a website audit is run, from public links found on the business website.
 - Explainable 0–100 opportunity score.
-- Website audit for HTTPS, mobile viewport, contact CTA, booking signals, response-time proxy, basic SEO/accessibility signals.
-- Pipeline: `new → reviewed → contacted → replied → proposal → won/lost`.
-- Do-not-contact handling.
-- CSV export.
+- Public website audit.
+- Local pipeline and do-not-contact state.
+- Search history with one-click clearing.
+- **Excel XLSX + CSV export.**
+- **Versioned REST / OpenAPI agent API.**
+- **MCP server for autonomous agents**, with stdio and Streamable HTTP transports.
 - SQLite local persistence.
-- No API key, n8n, Apify or paid CRM required.
+- No API key, n8n, Apify or paid CRM required for the core app.
 
-## Start
+## Start the app
 
 ### Windows
 Double-click `START_WINDOWS.bat`.
@@ -36,73 +36,128 @@ Double-click `START_WINDOWS.bat`.
 Double-click `START_MAC.command`.
 
 ### Linux
-Run:
 
 ```bash
 ./start.sh
 ```
 
-Or directly:
+Or:
 
 ```bash
-python3 Nishan.py
+python3 LeadScout.py
 ```
 
-Nishan opens at `http://127.0.0.1:8787`.
+The UI opens at:
 
-### Requirement
-Python 3.11+ only. The core app has no third-party Python package dependency.
+```text
+http://127.0.0.1:8787
+```
 
-## Typical flow
+Core requirement: Python 3.11+.
 
-1. Choose a country (optional), city/area, industry and radius.
-2. Click **Find leads**.
-3. Filter by:
-   - no site found
-   - weak website
-   - social account available
-   - opportunity score
-   - pipeline stage
+## Agent API
+
+REST base:
+
+```text
+http://127.0.0.1:8787/api/v1
+```
+
+OpenAPI:
+
+```text
+http://127.0.0.1:8787/api/v1/openapi.json
+```
+
+Optional REST protection:
+
+```bash
+export LEADSCOUT_API_TOKEN="change-me"
+python3 LeadScout.py
+```
+
+Full REST/MCP guide: [docs/AGENTS.md](docs/AGENTS.md).
+
+## MCP
+
+Install the official MCP Python SDK v2 line:
+
+```bash
+python -m pip install "mcp>=2,<3"
+```
+
+Local stdio:
+
+```bash
+python mcp_server.py
+```
+
+Streamable HTTP:
+
+```bash
+python mcp_server.py --transport streamable-http --host 127.0.0.1 --port 8790
+```
+
+MCP endpoint:
+
+```text
+http://127.0.0.1:8790/mcp
+```
+
+Tools exposed:
+
+`capabilities`, `search_businesses`, `list_leads`, `get_lead_detail`, `audit_website`, `draft_outreach_message`, `update_pipeline_stage`, `do_not_contact`, `export_leads`, `clear_local_data`.
+
+## Typical human workflow
+
+1. Choose country, city/area, industry and radius.
+2. Find leads.
+3. Filter by site state, social availability, score or pipeline stage.
 4. Open a lead.
-5. Review contact information and discovered social channels.
-6. If a website exists, run **Website check**. This can also enrich social channels from the public site.
+5. Review phone, email and social channels.
+6. Audit the website when one exists.
 7. Generate an EN/TR/UR/SD outreach draft.
-8. Copy the draft or open an email client.
-9. Move the lead through the pipeline.
-10. Export the working set to CSV when needed.
+8. Move the lead through the pipeline.
+9. Export the current result set as Excel or CSV.
 
-## Data & accuracy
+## Data accuracy
 
-Discovery uses OpenStreetMap through public Overpass endpoints and location lookup through Nominatim. Coverage varies by country, city and category.
+Discovery uses OpenStreetMap through public Overpass endpoints and Nominatim for geocoding. Coverage varies by market.
 
-**“No site found” means the currently reviewed data source did not provide an independent website. It is not proof that no website exists anywhere online.**
+**“No site found” means the reviewed sources did not provide an independent website. It is not proof that no website exists anywhere online.**
 
-Social accounts have the same limitation: Nishan shows accounts found in the available source tags or public website links. Missing social data is unknown, not proof of absence.
+Missing email, phone or social data is also unknown, not proof of absence.
 
-Website audit results are lightweight public-page heuristics. The performance score is a response-time proxy, not Google Lighthouse.
+The website audit uses lightweight public-page heuristics. Its performance signal is a response-time proxy, not Google Lighthouse.
+
+## Result limits
+
+LeadScout itself no longer caps discovery at 250 records. Overpass queries use `out tags center qt;` without an output-count parameter. OpenStreetMap's Overpass infrastructure is still shared public infrastructure and can impose operational constraints such as timeouts or memory limits.
+
+For very large production workloads, use a compliant dedicated data provider or self-hosted data pipeline rather than overloading public community endpoints.
+
+## Export
+
+The UI can download:
+
+- `leadscout-leads.xlsx`
+- `leadscout-leads.csv`
+
+Excel output is a native XLSX workbook with frozen headers, filters, column sizing and dedicated social-channel columns.
 
 ## Privacy & safety
 
 - Lead data stays in local SQLite.
-- No analytics or telemetry are built in.
-- No secrets/API keys are required.
-- The website auditor blocks localhost and private-network targets, including redirects to private addresses.
-- Messages are never auto-sent.
-- Leads can be marked do-not-contact.
+- No analytics/telemetry.
+- Website audit blocks localhost/private-network targets and private redirects.
+- Messages are drafted only, never auto-sent.
+- Do-not-contact state is hidden from normal lists.
+- REST API binds locally by default and can require a bearer token.
 
-The user remains responsible for applicable privacy, marketing and anti-spam law in the target market.
+## Verification
 
-## Technical shape
+The repository contains three verification layers:
 
-- Python standard-library HTTP server
-- SQLite
-- OpenStreetMap / Overpass
-- Nominatim geocoding
-- Vanilla HTML/CSS/JS
-- Provider-neutral data model
-- Safe public-website audit
-- GitHub Actions CI
-
-## Open-data note
-
-OpenStreetMap data is subject to the Open Database License (ODbL) and public service usage policies. Public Overpass/Nominatim instances are shared infrastructure; use them responsibly. For high-volume production use, run or purchase a compliant data service instead of overloading community endpoints.
+- normal CI: unit tests, Python compilation and frontend JavaScript syntax
+- live provider smoke: Pakistan + other countries against real public data
+- agent smoke: installs the official MCP SDK and calls LeadScout tools in-process
