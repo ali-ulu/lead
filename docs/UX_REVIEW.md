@@ -1,70 +1,64 @@
-# UX Review
+# UX Review and V3 Direction
 
-Date: 2026-09-21
+## What failed in the earlier UI
 
-This review focuses on the operating flow of Lead Hunter rather than decorative styling.
+The earlier interface behaved like an admin dashboard instead of a focused lead-research product. Too many elements competed at once: navigation chrome, large hero copy, metrics, filters, results and a permanent detail panel.
 
-## Problems found in the first UI
+The core job is simpler:
 
-1. **Too many competing layers on one screen.**
-   The sidebar, oversized marketing headline, search form, filters, four metric cards, results list and persistent detail pane all competed for attention.
+1. choose a market,
+2. scan the strongest opportunities,
+3. inspect one business,
+4. decide whether to contact it.
 
-2. **The main job was not visually dominant.**
-   The product exists to search a market, scan opportunities and inspect one lead. The first UI treated all secondary features as equally important.
+## V3 interaction model
 
-3. **The Pipeline navigation was misleading.**
-   It behaved mostly like another filter rather than a distinct workflow, so the sidebar added navigation cost without adding a meaningful destination.
+Nishan keeps three layers:
 
-4. **The permanent right detail pane wasted space.**
-   Before a lead was selected, almost half the workspace was an empty panel. After selection, audit, scoring, pipeline and outreach were stacked into one long surface.
+### 1. Market search
+Country, city/area, industry and radius.
 
-5. **Too many cards, pills and badges.**
-   Contact channels, pipeline state, website state, score and metrics created badge noise. This made scanning slower instead of faster.
+### 2. Opportunity list
+Only the information required for scanning:
+- business
+- web-presence state
+- available contact/social channels
+- pipeline stage
+- opportunity score
 
-6. **Website state language was too confident.**
-   Open data missing a website field is not proof that no website exists. The UI now says “No site found” and distinguishes unaudited sites as “Not checked.”
+### 3. Lead drawer
+A temporary side panel with:
+- overview
+- website check
+- outreach
 
-7. **Mobile layout was not acceptable.**
-   The original table/list structure and two-pane detail approach created unnecessary vertical and horizontal pressure on small screens.
+## V3 visual direction
 
-8. **Keyboard access was incomplete.**
-   Lead rows were mouse-oriented. Results can now be opened with Enter or Space and receive visible focus.
+- Product renamed to **Nishan**.
+- AI-ULU branding removed.
+- Dark dashboard theme removed.
+- White editorial surface with a deep flag-red accent.
+- Black/charcoal type for strong contrast.
+- Red is reserved for priority, active states and the primary action.
+- Fewer cards and decorative badges.
+- Mobile result table drops non-essential columns instead of forcing horizontal scroll.
+- Urdu and Sindhi switch to RTL at document level.
 
-## New interaction model
+## V3 capability additions
 
-The product now has three layers:
+### Must-have
+- EN / TR / UR / SD UI
+- Urdu/Sindhi RTL
+- social-channel capture
+- social-only filter
+- public website social-link enrichment
+- safe website audit redirects
+- explainable scoring
+- human-reviewed outreach
 
-1. **Search**
-   Country, city/area, industry and radius.
-
-2. **Results**
-   A compact sortable-by-score list with only the information needed to decide what to inspect:
-   business, website state, contact availability, pipeline stage and opportunity score.
-
-3. **Lead drawer**
-   Selecting a lead opens a temporary right-side drawer instead of permanently consuming half the screen.
-
-   The drawer is split into:
-   - Overview
-   - Website
-   - Outreach
-
-Secondary work is hidden until the user asks for it.
-
-## Visual decisions
-
-- Removed the sidebar.
-- Removed the oversized landing-page headline.
-- Removed the four metric cards.
-- Replaced card-heavy lead rows with a scanning table.
-- Replaced the permanent detail panel with a drawer.
-- Replaced one long detail screen with tabs.
-- Kept one accent color for priority and action.
-- Reduced border, badge and label density.
-- Preserved the dark AI-ULU visual language without turning the product into a generic AI dashboard.
-
-## Additional fixes from review
-
-- Mobile result table drops non-essential Contact and Stage columns instead of forcing horizontal overflow.
-- Website audit redirects are revalidated so a public URL cannot silently redirect the auditor to a local/private target.
-- Existing CI continues to check unit tests, Python compilation and JavaScript syntax.
+### Nice-to-have included
+- last search remembered locally
+- quick map/email/phone/social actions
+- WhatsApp link when explicitly present in source data
+- multilingual outreach drafts
+- CSV export including social-channel JSON
