@@ -196,6 +196,46 @@ def _tile_boxes(south: float, west: float, north: float, east: float, grid: int 
     return boxes
 
 
+def _fetch_tile_rows(
+    south: float,
+    west: float,
+    north: float,
+    east: float,
+    category: str,
+    city: str,
+    country: str,
+    timeout: int,
+    depth: int = 0,
+    max_depth: int = 2,
+) -> list[dict[str, Any]]:
+    try:
+        data = _fetch(_build_query(south, west, north, east, category, timeout), timeout)
+        return _normalize(data, category, city, country, None)
+    except RuntimeError:
+        if depth >= max_depth:
+            return []
+
+        rows: list[dict[str, Any]] = []
+        for sub_s, sub_w, sub_n, sub_e in _tile_boxes(
+            south, west, north, east, grid=2
+        ):
+            rows.extend(
+                _fetch_tile_rows(
+                    sub_s,
+                    sub_w,
+                    sub_n,
+                    sub_e,
+                    category,
+                    city,
+                    country,
+                    timeout,
+                    depth + 1,
+                    max_depth,
+                )
+            )
+        return rows
+
+
 def _search_tiled_around(
     lat: float,
     lon: float,
@@ -210,8 +250,17 @@ def _search_tiled_around(
     merged: dict[str, dict[str, Any]] = {}
 
     for tile_s, tile_w, tile_n, tile_e in _tile_boxes(south, west, north, east, grid=2):
-        data = _fetch(_build_query(tile_s, tile_w, tile_n, tile_e, category, timeout), timeout)
-        for row in _normalize(data, category, city, country, None):
+        rows = _fetch_tile_rows(
+            tile_s,
+            tile_w,
+            tile_n,
+            tile_e,
+            category,
+            city,
+            country,
+            timeout,
+        )
+        for row in rows:
             row_lat = row.get("latitude")
             row_lon = row.get("longitude")
             if row_lat is not None and row_lon is not None:
