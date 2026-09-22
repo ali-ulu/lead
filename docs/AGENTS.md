@@ -48,7 +48,7 @@ curl -X POST http://127.0.0.1:8787/api/v1/search \
   -d '{"country":"Pakistan","city":"Karachi","category":"restaurant","radius_km":20}'
 ```
 
-The response includes all stored lead IDs from that search. No application-level result cap is applied unless `max_results` is explicitly sent.
+The response includes a `search_id` for the complete stored result set. No application-level result cap is applied unless `max_results` is explicitly sent. A short `ids` compatibility preview may also be present, but agents should use `search_id` for large searches.
 
 Read those leads:
 
@@ -144,13 +144,13 @@ http://127.0.0.1:8790/mcp
 An agent can:
 
 1. call `search_businesses(city="Karachi", country="Pakistan", category="beauty", radius_km=20)`
-2. receive the full search's lead IDs
-3. call `list_leads(ids=[...], min_score=50, page_size=100)`
+2. receive the search's `search_id`
+3. call `list_leads(search_id="...", min_score=50, page_size=100)`
 4. inspect the strongest leads
 5. call `audit_website(lead_id=...)` for leads that have websites
 6. call `draft_outreach_message(lead_id=..., lang="ur")`
 7. call `update_pipeline_stage(..., status="reviewed")`
-8. export the working set with `export_leads(format="xlsx", ids=[...])`
+8. export the working set with `export_leads(format="xlsx", search_id="...")`
 
 The MCP list tool is paginated to keep individual model/tool responses manageable. Pagination does **not** cap discovery or the number of leads stored.
 
@@ -162,3 +162,14 @@ The MCP list tool is paginated to keep individual model/tool responses manageabl
 - Website audit blocks localhost/private-network targets and private redirects.
 - Outreach is drafted only. LeadScout does not auto-send messages.
 - Do-not-contact state is honored by normal lead lists.
+
+## Large searches
+
+LeadScout stores the membership of each discovery run in `search_runs` / `search_run_leads`. This avoids giant query strings when a dense city/category returns thousands of businesses.
+
+Use:
+
+- REST: `?search_id=<id>`
+- MCP: `search_id="..."`
+
+The legacy `ids` filter remains for compatibility with old local history, but `search_id` is the preferred agent interface.
