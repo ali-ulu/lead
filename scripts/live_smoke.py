@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end live provider verification for LeadScout 4.0."""
+"""End-to-end live provider verification for LeadScout 7.0."""
 from __future__ import annotations
 
 import json
@@ -8,7 +8,7 @@ import time
 from lead_hunter.db import clear_all, initialize
 from lead_hunter.services import discover_businesses, query_leads
 
-VERIFY_RELEASE = "4.0.0"
+VERIFY_RELEASE = "7.0.0"
 
 CASES = [
     ("Karachi", "Pakistan", "restaurant", 20),
@@ -34,9 +34,14 @@ def main() -> int:
             search_id = result["search_id"]
             leads = query_leads(search_id=search_id)
 
-            if len(leads) != result["count"]:
+            # Discovery count is the merged provider row count before SQLite
+            # upsert conflict resolution. Stored leads are intentionally unique,
+            # so deduplication may make this number slightly smaller.
+            if not leads:
+                raise RuntimeError("search_id returned no stored leads")
+            if len(leads) > result["count"]:
                 raise RuntimeError(
-                    f"search_id mismatch: discovery={result['count']} stored={len(leads)}"
+                    f"stored lead count exceeded discovery count: discovery={result['count']} stored={len(leads)}"
                 )
 
             row = {
@@ -46,6 +51,8 @@ def main() -> int:
                 "radius_km": radius,
                 "search_id": search_id,
                 "count": len(leads),
+                "discovery_count": result["count"],
+                "deduplicated": max(0, result["count"] - len(leads)),
                 "with_website": sum(bool(x.get("website")) for x in leads),
                 "with_phone": sum(bool(x.get("phone")) for x in leads),
                 "with_email": sum(bool(x.get("email")) for x in leads),
@@ -100,7 +107,7 @@ def main() -> int:
 
     print(
         f"PASS: LeadScout {VERIFY_RELEASE} completed {verified_cases}/{len(results)} "
-        "live end-to-end searches, exceeded 250 results, and verified search_id isolation",
+        "live end-to-end searches, exceeded 250 unique results, and verified search_id isolation with deduplication",
         flush=True,
     )
     clear_all()
