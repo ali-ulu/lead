@@ -12,6 +12,7 @@ SCHEMA_PATH = ROOT / "sql" / "schema.sql"
 
 LEAD_MIGRATIONS = {
     "source_refs": "TEXT NOT NULL DEFAULT '{}'",
+    "messaging_ids": "TEXT NOT NULL DEFAULT '{}'",
     "verification_status": "TEXT NOT NULL DEFAULT 'unverified'",
     "verification_notes": "TEXT NOT NULL DEFAULT '[]'",
     "audit_engine": "TEXT",
@@ -63,7 +64,7 @@ def _decode(row: sqlite3.Row | None) -> dict[str, Any] | None:
         return None
     item = dict(row)
     for key, fallback in {
-        "score_reasons": [], "social_links": {}, "source_refs": {},
+        "score_reasons": [], "social_links": {}, "messaging_ids": {}, "source_refs": {},
         "verification_notes": [], "intelligence_reasons": [],
     }.items():
         item[key] = _loads(item.get(key), fallback)
@@ -73,7 +74,7 @@ def _decode(row: sqlite3.Row | None) -> dict[str, Any] | None:
     return item
 
 def _jsonify(clean: dict[str, Any]) -> dict[str, Any]:
-    for key in ("social_links","source_refs"):
+    for key in ("social_links","messaging_ids","source_refs"):
         if isinstance(clean.get(key), dict):
             clean[key] = json.dumps(clean[key], ensure_ascii=False, sort_keys=True)
     for key in ("score_reasons","verification_notes","intelligence_reasons"):
@@ -85,7 +86,7 @@ def upsert_leads(rows: list[dict[str, Any]]) -> list[int]:
     ids: list[int] = []
     columns = [
         "source","source_id","source_refs","name","country","city","category","latitude","longitude",
-        "website","phone","email","social_url","social_links","website_status",
+        "website","phone","email","social_url","social_links","messaging_ids","website_status",
         "verification_status","verification_notes","performance_score","seo_score","accessibility_score",
         "mobile_ok","has_cta","has_booking","has_https","audit_engine","rating","review_count",
         "data_confidence","contactability_score","commercial_score","intelligence_reasons",
@@ -161,7 +162,7 @@ def get_lead(lead_id: int) -> dict[str, Any] | None:
 
 def update_lead(lead_id: int, fields: dict[str, Any]) -> dict[str, Any] | None:
     allowed = {
-        "website","phone","email","social_url","social_links","source_refs","website_status",
+        "website","phone","email","social_url","social_links","messaging_ids","source_refs","website_status",
         "verification_status","verification_notes","performance_score","seo_score","accessibility_score",
         "mobile_ok","has_cta","has_booking","has_https","audit_engine","rating","review_count",
         "data_confidence","contactability_score","commercial_score","intelligence_reasons",
