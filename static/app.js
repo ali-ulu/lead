@@ -8,10 +8,12 @@ let socialOnly = false;
 let draftText = '';
 let currentLang = localStorage.getItem('nishanLang') || 'en';
 let lastAudit = null;
+let activeIds = JSON.parse(localStorage.getItem('nishanActiveIds') || '[]');
+let searchHistory = JSON.parse(localStorage.getItem('nishanHistory') || '[]');
 
 const I18N = {
   en:{
-    brandTagline:'Local business scout',language:'Language',exportCsv:'Export CSV',eyebrow:'FIND THE GAP',
+    brandTagline:'Local business scout',language:'Language',exportCsv:'Export CSV',clearHistory:'Clear history',recentSearches:'Recent searches',confirmClearHistory:'Clear saved searches and all locally cached leads/pipeline data?',historyCleared:'Search history and local lead cache cleared.',noActiveSearch:'Run or reopen a search first.',eyebrow:'FIND THE GAP',
     heroTitle:'Find businesses that are ready for a better web presence.',
     heroBody:'Search any market, spot missing or weak websites, collect contact and social channels, then move the best opportunities into outreach.',
     searchKicker:'SEARCH MARKET',searchTitle:'Where should Nishan look?',searchHelp:'Choose a city, industry and radius. No API key required.',
@@ -35,7 +37,7 @@ const I18N = {
     searchRequired:'City / area and industry are required.',added:'{n} businesses added.'
   },
   tr:{
-    brandTagline:'Yerel işletme avcısı',language:'Dil',exportCsv:'CSV dışa aktar',eyebrow:'FIRSATI BUL',
+    brandTagline:'Yerel işletme avcısı',language:'Dil',exportCsv:'CSV dışa aktar',clearHistory:'Geçmişi temizle',recentSearches:'Son aramalar',confirmClearHistory:'Kayıtlı aramaları ve yerel lead/pipeline verilerini temizlemek istiyor musun?',historyCleared:'Arama geçmişi ve yerel lead cache temizlendi.',noActiveSearch:'Önce bir arama yap veya geçmişten bir arama aç.',eyebrow:'FIRSATI BUL',
     heroTitle:'Daha iyi bir web varlığına hazır işletmeleri bul.',
     heroBody:'İstediğin pazarı tara, sitesi olmayan veya zayıf olan işletmeleri ayır, iletişim ve sosyal kanalları topla, en iyi fırsatları satış akışına taşı.',
     searchKicker:'PAZAR ARA',searchTitle:'Nishan nerede arasın?',searchHelp:'Şehir, sektör ve yarıçap seç. API anahtarı gerekmez.',
@@ -59,7 +61,7 @@ const I18N = {
     searchRequired:'Şehir / bölge ve sektör gerekli.',added:'{n} işletme eklendi.'
   },
   ur:{
-    brandTagline:'مقامی کاروبار تلاش کریں',language:'زبان',exportCsv:'CSV ایکسپورٹ',eyebrow:'موقع تلاش کریں',
+    brandTagline:'مقامی کاروبار تلاش کریں',language:'زبان',exportCsv:'CSV ایکسپورٹ',clearHistory:'ہسٹری صاف کریں',recentSearches:'حالیہ تلاشیں',confirmClearHistory:'محفوظ تلاشیں اور مقامی لیڈ/پائپ لائن ڈیٹا صاف کریں؟',historyCleared:'تلاش کی ہسٹری اور مقامی لیڈ کیش صاف ہوگئی۔',noActiveSearch:'پہلے نئی تلاش کریں یا حالیہ تلاش کھولیں۔',eyebrow:'موقع تلاش کریں',
     heroTitle:'ایسے کاروبار تلاش کریں جنہیں بہتر ویب موجودگی کی ضرورت ہے۔',
     heroBody:'کسی بھی مارکیٹ میں تلاش کریں، کمزور یا غائب ویب سائٹس دیکھیں، رابطہ اور سوشل چینلز جمع کریں، پھر بہترین مواقع کو آؤٹ ریچ میں لے جائیں۔',
     searchKicker:'مارکیٹ تلاش کریں',searchTitle:'نشان کہاں تلاش کرے؟',searchHelp:'شہر، شعبہ اور دائرہ منتخب کریں۔ API key کی ضرورت نہیں۔',
@@ -83,7 +85,7 @@ const I18N = {
     searchRequired:'شہر / علاقہ اور شعبہ ضروری ہیں۔',added:'{n} کاروبار شامل ہوئے۔'
   },
   sd:{
-    brandTagline:'مقامي ڪاروبار ڳوليو',language:'ٻولي',exportCsv:'CSV ايڪسپورٽ',eyebrow:'موقعو ڳوليو',
+    brandTagline:'مقامي ڪاروبار ڳوليو',language:'ٻولي',exportCsv:'CSV ايڪسپورٽ',clearHistory:'تاريخ صاف ڪريو',recentSearches:'تازيون ڳولائون',confirmClearHistory:'محفوظ ڳولائون ۽ مقامي ليڊ/پائپ لائن ڊيٽا صاف ڪجي؟',historyCleared:'ڳولا تاريخ ۽ مقامي ليڊ ڪيش صاف ٿي وئي.',noActiveSearch:'پهرين ڳولا ڪريو يا تازو ڳولا کوليو.',eyebrow:'موقعو ڳوليو',
     heroTitle:'اهي ڪاروبار ڳوليو جن کي بهتر ويب موجودگي جي ضرورت آهي.',
     heroBody:'ڪنهن به مارڪيٽ ۾ ڳوليو، ڪمزور يا نه مليل ويب سائيٽون ڏسو، رابطا ۽ سوشل چينل گڏ ڪريو ۽ بهتر موقعن کي آوٽ ريچ ڏانهن وٺي وڃو.',
     searchKicker:'مارڪيٽ ڳوليو',searchTitle:'نشان ڪٿي ڳولي؟',searchHelp:'شهر، ڪاروباري شعبي ۽ دائري کي چونڊيو. API key جي ضرورت ناهي.',
@@ -140,6 +142,7 @@ function applyLanguage(lang){
   if($('country')) $('country').placeholder=currentLang==='ur'?'پاکستان':currentLang==='sd'?'پاڪستان':currentLang==='tr'?'Pakistan':'Pakistan';
   if($('city')) $('city').placeholder=currentLang==='tr'?'Karaçi':'Karachi';
   populateCategories();
+  renderRecentSearches();
   renderTable();
   if(currentLead) renderDetail(currentLead);
 }
@@ -162,6 +165,7 @@ async function api(url,options={}){
 
 function filters(){
   const params=new URLSearchParams();
+  if(activeIds.length) params.set('ids',activeIds.join(','));
   if(websiteFilter) params.set('website_status',websiteFilter);
   if(socialOnly) params.set('has_social','1');
   const score=$('min_score').value.trim();
@@ -172,6 +176,11 @@ function filters(){
 }
 
 async function load(){
+  if(!activeIds.length){
+    leads=[];
+    renderTable();
+    return;
+  }
   const data=await api('/api/leads?'+filters());
   leads=data.items||[];
   renderTable();
@@ -234,6 +243,79 @@ function renderTable(){
   });
 }
 
+function saveHistory(){
+  localStorage.setItem('nishanHistory',JSON.stringify(searchHistory));
+  localStorage.setItem('nishanActiveIds',JSON.stringify(activeIds));
+}
+
+function renderRecentSearches(){
+  const node=$('recentSearches');
+  if(!node) return;
+  node.classList.toggle('hidden',searchHistory.length===0);
+  if(!searchHistory.length){ node.innerHTML=''; return; }
+  node.innerHTML=`<span class="recent-label">${esc(t('recentSearches'))}</span>`+
+    searchHistory.map((item,index)=>`<button class="recent-chip" data-history-index="${index}">${esc(item.city)} · ${esc(CATEGORY_LABELS[item.category]||item.category)} · ${item.radius_km} km</button>`).join('');
+  node.querySelectorAll('[data-history-index]').forEach(button=>button.addEventListener('click',()=>{
+    const item=searchHistory[Number(button.dataset.historyIndex)];
+    if(!item) return;
+    $('country').value=item.country||'';
+    $('city').value=item.city||'';
+    $('category').value=item.category||'';
+    $('radius_km').value=String(item.radius_km||20);
+    activeIds=Array.isArray(item.ids)?item.ids:[];
+    localStorage.setItem('nishanSearch',JSON.stringify({
+      country:item.country||'',city:item.city||'',category:item.category||'',radius_km:item.radius_km||20
+    }));
+    saveHistory();
+    $('areaLabel').textContent=item.display_name||`${item.city}, ${item.country}`;
+    load();
+  }));
+}
+
+function rememberSearch(search,data){
+  const key=`${search.country.toLowerCase()}|${search.city.toLowerCase()}|${search.category}|${search.radius_km}`;
+  const entry={
+    key,
+    country:search.country,
+    city:search.city,
+    category:search.category,
+    radius_km:search.radius_km,
+    ids:Array.isArray(data.ids)?data.ids:[],
+    display_name:data.area?.display_name||`${search.city}, ${search.country}`,
+    at:Date.now()
+  };
+  searchHistory=[entry,...searchHistory.filter(item=>item.key!==key)].slice(0,6);
+  activeIds=entry.ids;
+  saveHistory();
+  renderRecentSearches();
+}
+
+async function clearHistory(){
+  if(!confirm(t('confirmClearHistory'))) return;
+  try{
+    await api('/api/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    activeIds=[];
+    searchHistory=[];
+    leads=[];
+    selectedId=null;
+    currentLead=null;
+    draftText='';
+    lastAudit=null;
+    ['nishanSearch','nishanHistory','nishanActiveIds','leadHunterSearch'].forEach(key=>localStorage.removeItem(key));
+    $('country').value='';
+    $('city').value='';
+    $('category').value='';
+    $('radius_km').value='20';
+    $('areaLabel').textContent=t('searchHelp');
+    closeDrawer();
+    renderRecentSearches();
+    renderTable();
+    toast(t('historyCleared'));
+  }catch(error){
+    toast(error.message,true);
+  }
+}
+
 async function discover(){
   const country=$('country').value.trim();
   const city=$('city').value.trim();
@@ -254,6 +336,7 @@ async function discover(){
       body:JSON.stringify({country,city,category,radius_km})
     });
     $('areaLabel').textContent=`${data.area.display_name} · ${t('found',{n:data.count})}`;
+    rememberSearch({country,city,category,radius_km},data);
     toast(t('added',{n:data.count}));
     await load();
   }catch(error){
@@ -484,7 +567,11 @@ function populateCategories(){
 
 function bind(){
   $('discover').addEventListener('click',discover);
-  $('export').addEventListener('click',()=>{location.href='/api/export.csv?'+filters()});
+  $('clearHistory').addEventListener('click',clearHistory);
+  $('export').addEventListener('click',()=>{
+    if(!activeIds.length){toast(t('noActiveSearch'),true);return;}
+    location.href='/api/export.csv?'+filters();
+  });
   $('min_score').addEventListener('change',load);
   $('pipeline_status').addEventListener('change',load);
   $('language').addEventListener('change',event=>applyLanguage(event.target.value));
@@ -522,6 +609,7 @@ async function init(){
     if(saved[key]!=null&&$(key)) $(key).value=saved[key];
   });
 
+  renderRecentSearches();
   bind();
   await load();
 }
