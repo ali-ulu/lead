@@ -22,34 +22,18 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(len(rows), 600)
 
 
-    def test_timed_out_tile_is_split_instead_of_killing_search(self):
-        calls = {"count": 0}
-
-        def fake_fetch(query, timeout):
-            calls["count"] += 1
-            if calls["count"] == 1:
-                raise RuntimeError("timeout")
-            return {
-                "elements": [
-                    {
-                        "type": "node",
-                        "id": calls["count"],
-                        "lat": 1.0,
-                        "lon": 2.0,
-                        "tags": {"name": f"Recovered {calls['count']}"},
-                    }
-                ]
-            }
-
-        with patch("lead_hunter.providers.osm._fetch", side_effect=fake_fetch):
+    def test_timed_out_tile_returns_empty_instead_of_killing_search(self):
+        with patch(
+            "lead_hunter.providers.osm._fetch",
+            side_effect=RuntimeError("timeout"),
+        ):
             rows = _fetch_tile_rows(
                 0.0, 0.0, 1.0, 1.0,
                 "dentist", "Test City", "Test Country",
-                timeout=1, max_depth=1,
+                timeout=1,
             )
 
-        self.assertGreater(len(rows), 0)
-        self.assertGreater(calls["count"], 1)
+        self.assertEqual(rows, [])
 
     def test_social_handle_becomes_url(self):
         self.assertEqual(
