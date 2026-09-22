@@ -99,7 +99,7 @@ def _build_around_query(lat: float, lon: float, radius_m: int, category: str, ti
     filters = CATEGORY_FILTERS.get(category)
     if not filters:
         raise ValueError(f"Unsupported category: {category}")
-    radius_m = max(1000, min(50000, int(radius_m)))
+    radius_m = max(1000, min(100000, int(radius_m)))
     parts = [f'nwr["{key}"="{value}"](around:{radius_m},{lat},{lon});' for key, value in filters]
     return f'[out:json][timeout:{timeout}];({"".join(parts)});out tags center qt;'
 
