@@ -568,10 +568,12 @@ function populateCategories(){
 function bind(){
   $('discover').addEventListener('click',discover);
   $('clearHistory').addEventListener('click',clearHistory);
-  $('export').addEventListener('click',()=>{
+  const doExport=(format)=>{
     if(!activeIds.length){toast(t('noActiveSearch'),true);return;}
-    location.href='/api/export.csv?'+filters();
-  });
+    location.href=`/api/export.${format}?${filters()}`;
+  };
+  $('exportXlsx').addEventListener('click',()=>doExport('xlsx'));
+  $('exportCsv').addEventListener('click',()=>doExport('csv'));
   $('min_score').addEventListener('change',load);
   $('pipeline_status').addEventListener('change',load);
   $('language').addEventListener('change',event=>applyLanguage(event.target.value));
