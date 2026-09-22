@@ -86,8 +86,8 @@ def main() -> int:
         return 5
 
     verified_cases = sum(1 for x in results if x.get("count", 0) > 0)
-    if verified_cases < 4:
-        print(f"FAIL: only {verified_cases} live market/category cases returned data", flush=True)
+    if verified_cases != len(results):
+        print(f"FAIL: only {verified_cases}/{len(results)} live market/category cases returned data", flush=True)
         return 4
 
     print(
