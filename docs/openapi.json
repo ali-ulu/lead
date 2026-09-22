@@ -3,7 +3,7 @@
   "info": {
     "title": "LeadScout Agent API",
     "version": "4.0.0",
-    "description": "Local-first API for searching businesses, inspecting leads, auditing public websites, drafting outreach, updating pipeline stages, and exporting lead data."
+    "description": "Local-first API for searching businesses, inspecting leads, auditing public websites, drafting outreach, updating pipeline stages, and exporting lead data. Search responses include a scalable search_id so thousands of results do not need to be passed as URL IDs."
   },
   "servers": [
     {
@@ -34,7 +34,7 @@
     "/api/v1/search": {
       "post": {
         "summary": "Search a city/area for businesses",
-        "description": "No application-level result cap is applied unless max_results is explicitly provided. The upstream provider may still impose operational limits.",
+        "description": "No application-level result cap is applied unless max_results is explicitly provided. The response includes search_id. Use search_id with lead-list and export endpoints for the complete stored result set; the optional ids field is only a compatibility preview and may be truncated.",
         "requestBody": {
           "required": true,
           "content": {
@@ -85,6 +85,14 @@
       "get": {
         "summary": "List/filter locally stored leads",
         "parameters": [
+          {
+            "name": "search_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search-run identifier returned by POST /api/v1/search. Preferred for large result sets."
+          },
           {
             "name": "ids",
             "in": "query",
@@ -311,7 +319,56 @@
           "200": {
             "description": "CSV file"
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "search_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Export the complete stored result set from a search run."
+          },
+          {
+            "name": "ids",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional legacy comma-separated lead IDs."
+          },
+          {
+            "name": "website_status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pipeline_status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "min_score",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "has_social",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ]
       }
     },
     "/api/v1/export.xlsx": {
@@ -321,7 +378,56 @@
           "200": {
             "description": "XLSX file"
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "search_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Export the complete stored result set from a search run."
+          },
+          {
+            "name": "ids",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional legacy comma-separated lead IDs."
+          },
+          {
+            "name": "website_status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pipeline_status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "min_score",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "has_social",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ]
       }
     },
     "/api/v1/clear": {
