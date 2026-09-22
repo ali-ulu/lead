@@ -10,6 +10,7 @@ import lead_hunter.db as db
 from lead_hunter.crm import (
     add_activity,
     list_activities,
+    mark_stale_no_response,
     set_engagement,
     update_delivery_status,
 )
@@ -75,6 +76,16 @@ class V5FeatureTests(unittest.TestCase):
         rows=list_activities(lead_id)
         self.assertGreaterEqual(len(rows),2)
         self.assertEqual(db.get_lead(lead_id)["engagement_status"],"rejected")
+
+    def test_stale_sent_lead_becomes_no_response(self):
+        lead_id=self._lead()
+        db.update_lead(lead_id,{
+            "engagement_status":"sent",
+            "last_contacted_at":"2026-01-01T00:00:00+00:00",
+        })
+        result=mark_stale_no_response(7)
+        self.assertIn(lead_id,result["lead_ids"])
+        self.assertEqual(db.get_lead(lead_id)["engagement_status"],"no_response")
 
     def test_delivery_receipt_updates_message_and_lead(self):
         lead_id=self._lead()
