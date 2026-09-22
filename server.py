@@ -16,7 +16,7 @@ from lead_hunter.crm import add_note, list_activities, set_engagement, set_follo
 from lead_hunter.db import clear_all, get_lead, get_search_run, initialize, list_leads
 from lead_hunter.exporters import csv_bytes, xlsx_bytes
 from lead_hunter.oauth_meta import (
-    disconnect, handle_callback, list_connections, meta_configured,
+    disconnect, handle_callback, handle_webhook_payload, list_connections, meta_configured,
     oauth_start_url, send_message,
 )
 from lead_hunter.providers.osm import CATEGORY_FILTERS
@@ -48,6 +48,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status); self.send_header("Content-Type","application/json; charset=utf-8")
         self.send_header("Content-Length",str(len(body))); self.send_header("Cache-Control","no-store")
         self.end_headers(); self.wfile.write(body)
+
+    def _text(self,text:str,status=200):
+        body=text.encode("utf-8")
+        self.send_response(status); self.send_header("Content-Type","text/plain; charset=utf-8")
+        self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body)
 
     def _bytes(self,body:bytes,content_type:str,filename:str):
         self.send_response(200); self.send_header("Content-Type",content_type)
@@ -110,6 +115,12 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError: return self._json({"error":"invalid id"},400)
             except LookupError as exc: return self._json({"error":str(exc)},404)
 
+        if path=="/api/v1/webhooks/meta":
+            q=parse_qs(parsed.query)
+            verify=os.environ.get("META_WEBHOOK_VERIFY_TOKEN","").strip()
+            if q.get("hub.mode",[""])[0]=="subscribe" and verify and q.get("hub.verify_token",[""])[0]==verify:
+                return self._text(q.get("hub.challenge",[""])[0])
+            return self._text("forbidden",403)
         if path=="/api/v1/oauth/meta/start":
             try: return self._redirect(oauth_start_url())
             except Exception as exc: return self._json({"error":str(exc)},400)
@@ -149,6 +160,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed=urlparse(self.path); path=parsed.path; payload=self._body_json()
         if not self._authorized(path): return self._json({"error":"unauthorized"},401)
+
+        if path=="/api/v1/webhooks/meta":
+            try:
+                provider=parse_qs(parsed.query).get("provider",["facebook"])[0]
+                return self._json(handle_webhook_payload(provider,payload))
+            except Exception as exc:
+                return self._json({"error":str(exc)},400)
 
         if path in {"/api/discover","/api/v1/search"}:
             try:
