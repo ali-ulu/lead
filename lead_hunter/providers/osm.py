@@ -223,7 +223,7 @@ def _fetch_tile_rows(
         return []
 
 
-def _search_tiled_around(
+def _search_tiled_around_detailed(
     lat: float,
     lon: float,
     radius_km: int,
@@ -232,21 +232,15 @@ def _search_tiled_around(
     country: str,
     timeout: int,
     limit: int | None,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     south, west, north, east = _radius_bbox(lat, lon, radius_km)
     merged: dict[str, dict[str, Any]] = {}
+    failed_tiles = 0
 
     for tile_s, tile_w, tile_n, tile_e in _tile_boxes(south, west, north, east, grid=2):
-        rows = _fetch_tile_rows(
-            tile_s,
-            tile_w,
-            tile_n,
-            tile_e,
-            category,
-            city,
-            country,
-            timeout,
-        )
+        rows = _fetch_tile_rows(tile_s, tile_w, tile_n, tile_e, category, city, country, timeout)
+        if not rows:
+            failed_tiles += 1
         for row in rows:
             row_lat = row.get("latitude")
             row_lon = row.get("longitude")
@@ -255,17 +249,14 @@ def _search_tiled_around(
                     continue
             merged[row["source_id"]] = row
             if limit is not None and len(merged) >= limit:
-                return list(merged.values())[:limit]
+                return {"rows": list(merged.values())[:limit], "partial": failed_tiles > 0, "failed_tiles": failed_tiles}
 
-    return list(merged.values()) if limit is None else list(merged.values())[:limit]
+    rows = list(merged.values()) if limit is None else list(merged.values())[:limit]
+    return {"rows": rows, "partial": failed_tiles > 0, "failed_tiles": failed_tiles}
 
 
-def search_around(lat: float, lon: float, radius_km: int, category: str, city: str = "", country: str = "", timeout: int = 35, limit: int | None = None) -> list[dict[str, Any]]:
+def search_around_detailed(lat: float, lon: float, radius_km: int, category: str, city: str = "", country: str = "", timeout: int = 35, limit: int | None = None) -> dict[str, Any]:
     radius_km = max(1, min(100, int(radius_km)))
-
-    # One short uncapped probe first. If the shared provider is slow,
-    # switch quickly to smaller best-effort tiles instead of waiting through
-    # long timeouts on multiple public endpoints.
     probe_timeout = min(timeout, 12)
     try:
         data = _fetch_one(
@@ -273,9 +264,15 @@ def search_around(lat: float, lon: float, radius_km: int, category: str, city: s
             _build_around_query(lat, lon, radius_km * 1000, category, probe_timeout),
             probe_timeout,
         )
-        return _normalize(data, category, city, country, limit)
+        return {"rows": _normalize(data, category, city, country, limit), "partial": False, "failed_tiles": 0}
     except Exception:
-        return _search_tiled_around(
-            lat, lon, radius_km, category, city, country, timeout, limit
-        )
+        result = _search_tiled_around_detailed(lat, lon, radius_km, category, city, country, timeout, limit)
+        result.setdefault("warnings", [])
+        if result.get("partial"):
+            result["warnings"].append(f"OpenStreetMap returned partial data: {result.get('failed_tiles', 0)} tile(s) timed out.")
+        return result
+
+
+def search_around(lat: float, lon: float, radius_km: int, category: str, city: str = "", country: str = "", timeout: int = 35, limit: int | None = None) -> list[dict[str, Any]]:
+    return search_around_detailed(lat, lon, radius_km, category, city, country, timeout, limit)["rows"]
 
