@@ -17,7 +17,7 @@ from lead_hunter.oauth_meta import (
 from lead_hunter.providers.osm import CATEGORY_FILTERS
 from lead_hunter.security import audit_agent_action, list_agent_audit, require_permission
 from lead_hunter.services import (
-    audit_lead, discover_businesses, draft_outreach, enrich_lead,
+    audit_lead, discover_businesses, draft_outreach, enrich_lead, enrich_reputation,
     mark_do_not_contact, query_leads, set_pipeline_stage, verify_lead,
 )
 
@@ -28,12 +28,12 @@ def capabilities() -> dict[str,Any]:
     """Describe LeadScout 5 capabilities."""
     initialize()
     return {
-        "name":"LeadScout","version":"5.1.0","global_search":True,
-        "providers":["osm","overture"],"result_cap":None,
+        "name":"LeadScout","version":"6.0.0","global_search":True,
+        "providers":["osm","overture","web_search_optional","google_places_optional"],"result_cap":None,
         "radius_km":{"min":1,"max":100},"categories":sorted(CATEGORY_FILTERS),
         "languages":["en","tr","ur","sd","de"],
         "exports":["csv","xlsx"],
-        "crm":True,"website_verification":True,"contact_enrichment":True,
+        "crm":True,"website_verification":True,"contact_enrichment":True,"reputation_enrichment":True,
         "lighthouse_when_installed":True,"meta_oauth":True,
         "autonomous_agent":True,
         "mcp_permissions":{
@@ -82,6 +82,11 @@ def verify_business(lead_id:int) -> dict[str,Any]:
 def enrich_contacts(lead_id:int) -> dict[str,Any]:
     """Crawl a public business website for email, phone, booking and social links."""
     initialize(); return enrich_lead(int(lead_id))
+
+@mcp.tool()
+def enrich_reputation_data(lead_id:int) -> dict[str,Any]:
+    """Optionally enrich rating/review count and verified business fields through Google Places."""
+    initialize(); return enrich_reputation(int(lead_id))
 
 @mcp.tool()
 def audit_website(lead_id:int) -> dict[str,Any]:
@@ -164,7 +169,8 @@ def send_social_message(lead_id:int,provider:str,text:str,recipient_id:str="",co
 @mcp.tool()
 def run_sales_agent(city:str,category:str,country:str="",radius_km:int=20,top_n:int=50,
                     min_score:int=40,lang:str="en",verify_missing:bool=True,
-                    audit_websites:bool=True,send:bool=False,send_provider:str="instagram",
+                    audit_websites:bool=True,reputation_enrichment:bool=True,
+                    send:bool=False,send_provider:str="instagram",
                     connection_id:int|None=None) -> dict[str,Any]:
     """Run search -> verify -> audit/enrich -> draft -> Excel; optional sending is separately gated."""
     initialize()
@@ -173,7 +179,8 @@ def run_sales_agent(city:str,category:str,country:str="",radius_km:int=20,top_n:
         require_permission("LEADSCOUT_MCP_ALLOW_SEND","MCP message sending",default=False)
     result=run_sales_job(city=city,category=category,country=country,radius_km=radius_km,
                          top_n=top_n,min_score=min_score,lang=lang,verify_missing=verify_missing,
-                         audit_websites=audit_websites,send=send,send_provider=send_provider,
+                         audit_websites=audit_websites,reputation_enrichment=reputation_enrichment,
+                         send=send,send_provider=send_provider,
                          connection_id=connection_id)
     audit_agent_action("run_sales_agent",target=result.get("job_id",""),metadata={"city":city,"country":country,"category":category,"send":send})
     return result
