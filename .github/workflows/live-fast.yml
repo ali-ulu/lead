@@ -1,0 +1,26 @@
+name: Fast live verification
+
+on:
+  push:
+    paths:
+      - "scripts/live_smoke_fast.py"
+      - ".github/workflows/live-fast.yml"
+      - "lead_hunter/providers/osm.py"
+      - "lead_hunter/providers/nominatim.py"
+      - "lead_hunter/services.py"
+
+permissions:
+  contents: read
+
+jobs:
+  fast-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python scripts/live_smoke_fast.py
