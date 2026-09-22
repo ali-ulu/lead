@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .db import connect, get_lead, update_lead
@@ -114,3 +114,32 @@ def update_delivery_status(external_id: str, status: str) -> bool:
             fields["last_reply_at"]=_utcnow()
         update_lead(int(row["lead_id"]),fields)
     return True
+
+
+def mark_stale_no_response(days: int = 7) -> dict[str,Any]:
+    days=max(1,min(365,int(days)))
+    cutoff=(datetime.now(timezone.utc)-timedelta(days=days)).isoformat()
+    with connect() as conn:
+        rows=conn.execute(
+            """
+            SELECT id FROM leads
+            WHERE do_not_contact=0
+              AND engagement_status IN ('sent','delivered')
+              AND last_contacted_at IS NOT NULL
+              AND last_contacted_at < ?
+              AND last_reply_at IS NULL
+            """,
+            (cutoff,),
+        ).fetchall()
+    updated=[]
+    for row in rows:
+        lead_id=int(row["id"])
+        update_lead(lead_id,{"engagement_status":"no_response"})
+        add_activity(
+            lead_id,
+            kind="status",
+            status="no_response",
+            metadata={"rule":"stale_no_response","days":days,"cutoff":cutoff},
+        )
+        updated.append(lead_id)
+    return {"updated_count":len(updated),"lead_ids":updated,"days":days,"cutoff":cutoff}
