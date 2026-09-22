@@ -24,6 +24,7 @@ async def main() -> None:
             "website_status": "missing",
             "social_links": {"instagram": "https://instagram.com/example"},
             "data_confidence": "medium",
+            "opportunity_gap_score": 88,
         },
         {
             "source": "mcp-smoke",
@@ -64,6 +65,16 @@ async def main() -> None:
             raise SystemExit(f"search_id isolation failed: {payload!r}")
         if payload["items"][0]["name"] != "Karachi MCP Demo":
             raise SystemExit(f"wrong search result: {payload!r}")
+
+        gap_filtered = await client.call_tool(
+            "list_leads",
+            {"search_id": search_id, "min_opportunity_gap_score": 80, "page_size": 5},
+        )
+        if gap_filtered.is_error:
+            raise SystemExit("visibility-filtered list_leads returned an error")
+        gap_payload = gap_filtered.structured_content or {}
+        if gap_payload.get("total") != 1:
+            raise SystemExit(f"opportunity gap filter failed: {gap_payload!r}")
 
         reputation = await client.call_tool(
             "enrich_reputation_data",
