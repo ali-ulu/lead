@@ -221,3 +221,43 @@ def receive_webhook_event(provider: str, lead_id: int, sender_id: str, text: str
     ids[provider]=sender_id
     update_lead(int(lead_id),{"messaging_ids":ids})
     return add_activity(int(lead_id),kind="reply",channel=provider,status="received",direction="in",body=text,external_id=external_id)
+
+
+def _lead_for_sender(provider: str, sender_id: str) -> dict[str,Any] | None:
+    with connect() as conn:
+        try:
+            row=conn.execute(
+                "SELECT * FROM leads WHERE json_extract(messaging_ids, ?) = ? LIMIT 1",
+                (f"$.{provider}",str(sender_id)),
+            ).fetchone()
+        except Exception:
+            row=None
+    if not row:
+        return None
+    return get_lead(int(row["id"]))
+
+
+def handle_webhook_payload(provider: str, payload: dict[str,Any]) -> dict[str,Any]:
+    provider=provider if provider in {"facebook","instagram"} else "facebook"
+    handled=0; unmatched=0
+    for entry in payload.get("entry") or []:
+        events=list(entry.get("messaging") or [])
+        for change in entry.get("changes") or []:
+            value=change.get("value") or {}
+            events.extend(value.get("messages") or [])
+        for event in events:
+            sender=(event.get("sender") or {}).get("id") or event.get("from")
+            message=event.get("message") or {}
+            if isinstance(message,str):
+                text=message; mid=str(event.get("id") or "")
+            else:
+                text=str(message.get("text") or "")
+                mid=str(message.get("mid") or event.get("id") or "")
+            if not sender or not text:
+                continue
+            lead=_lead_for_sender(provider,str(sender))
+            if not lead:
+                unmatched+=1; continue
+            receive_webhook_event(provider,int(lead["id"]),str(sender),text,mid)
+            handled+=1
+    return {"ok":True,"handled":handled,"unmatched":unmatched}
