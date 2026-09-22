@@ -28,12 +28,13 @@ def capabilities() -> dict[str,Any]:
     """Describe LeadScout 5 capabilities."""
     initialize()
     return {
-        "name":"LeadScout","version":"6.0.0","global_search":True,
+        "name":"LeadScout","version":"7.0.0","global_search":True,
         "providers":["osm","overture","web_search_optional","google_places_optional"],"result_cap":None,
         "radius_km":{"min":1,"max":100},"categories":sorted(CATEGORY_FILTERS),
         "languages":["en","tr","ur","sd","de"],
         "exports":["csv","xlsx"],
         "crm":True,"website_verification":True,"contact_enrichment":True,"reputation_enrichment":True,
+        "visibility_scores":["seo","aeo","geo","ai_visibility","opportunity_gap"],
         "lighthouse_when_installed":True,"meta_oauth":True,
         "autonomous_agent":True,
         "mcp_permissions":{
@@ -56,12 +57,16 @@ def search_businesses(city:str,category:str,country:str="",radius_km:int=20,max_
 @mcp.tool()
 def list_leads(search_id:str="",ids:list[int]|None=None,country:str="",city:str="",category:str="",
                website_status:str="",pipeline_status:str="",engagement_status:str="",min_score:int=0,
+               min_seo_score:int=0,min_aeo_score:int=0,min_geo_score:int=0,
+               min_ai_visibility_score:int=0,min_opportunity_gap_score:int=0,
                has_social:bool=False,contactable:bool=False,offset:int=0,page_size:int=100) -> dict[str,Any]:
     """List/filter leads with pagination."""
     initialize()
     rows=query_leads(search_id=search_id,ids=ids,country=country,city=city,category=category,
                      website_status=website_status,pipeline_status=pipeline_status,
                      engagement_status=engagement_status,min_score=min_score,
+                     min_seo_score=min_seo_score,min_aeo_score=min_aeo_score,min_geo_score=min_geo_score,
+                     min_ai_visibility_score=min_ai_visibility_score,min_opportunity_gap_score=min_opportunity_gap_score,
                      has_social=has_social,contactable=contactable)
     offset=max(0,int(offset)); page_size=max(1,min(500,int(page_size))); page=rows[offset:offset+page_size]
     return {"total":len(rows),"offset":offset,"page_size":page_size,
@@ -168,7 +173,7 @@ def send_social_message(lead_id:int,provider:str,text:str,recipient_id:str="",co
 
 @mcp.tool()
 def run_sales_agent(city:str,category:str,country:str="",radius_km:int=20,top_n:int=50,
-                    min_score:int=40,lang:str="en",verify_missing:bool=True,
+                    min_score:int=40,min_opportunity_gap:int=0,lang:str="en",verify_missing:bool=True,
                     audit_websites:bool=True,reputation_enrichment:bool=False,
                     send:bool=False,send_provider:str="instagram",
                     connection_id:int|None=None) -> dict[str,Any]:
@@ -178,7 +183,8 @@ def run_sales_agent(city:str,category:str,country:str="",radius_km:int=20,top_n:
     if send:
         require_permission("LEADSCOUT_MCP_ALLOW_SEND","MCP message sending",default=False)
     result=run_sales_job(city=city,category=category,country=country,radius_km=radius_km,
-                         top_n=top_n,min_score=min_score,lang=lang,verify_missing=verify_missing,
+                         top_n=top_n,min_score=min_score,min_opportunity_gap=min_opportunity_gap,
+                         lang=lang,verify_missing=verify_missing,
                          audit_websites=audit_websites,reputation_enrichment=reputation_enrichment,
                          send=send,send_provider=send_provider,
                          connection_id=connection_id)
@@ -201,11 +207,13 @@ def do_not_contact(lead_id:int) -> dict[str,Any]:
 @mcp.tool()
 def export_leads(format:str="xlsx",search_id:str="",ids:list[int]|None=None,country:str="",city:str="",
                  category:str="",website_status:str="",pipeline_status:str="",engagement_status:str="",
-                 min_score:int=0,has_social:bool=False,contactable:bool=False) -> dict[str,Any]:
+                 min_score:int=0,min_opportunity_gap_score:int=0,
+                 has_social:bool=False,contactable:bool=False) -> dict[str,Any]:
     initialize()
     rows=query_leads(search_id=search_id,ids=ids,country=country,city=city,category=category,
                      website_status=website_status,pipeline_status=pipeline_status,
                      engagement_status=engagement_status,min_score=min_score,
+                     min_opportunity_gap_score=min_opportunity_gap_score,
                      has_social=has_social,contactable=contactable)
     fmt=format.lower().strip()
     if fmt not in {"csv","xlsx"}: raise ValueError("format must be csv or xlsx")
