@@ -1,54 +1,85 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="dark">
-  <title>AI-ULU Lead Hunter</title>
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#b31224">
+  <title>Nishan — Local Business Scout</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <header class="topbar">
-    <div class="brand">
-      <span class="brand-mark">AI</span>
-      <div>
-        <strong>AI-ULU Lead Hunter</strong>
-        <span>Find businesses that need a better website.</span>
-      </div>
-    </div>
+    <a class="brand" href="/" aria-label="Nishan home">
+      <span class="brand-mark" aria-hidden="true">ن</span>
+      <span class="brand-copy">
+        <strong>Nishan</strong>
+        <small data-i18n="brandTagline">Local business scout</small>
+      </span>
+    </a>
+
     <div class="top-actions">
-      <button id="export" class="quiet-btn">Export CSV</button>
-      <span class="live-dot"><i></i> live data</span>
+      <label class="language-picker">
+        <span data-i18n="language">Language</span>
+        <select id="language" aria-label="Language">
+          <option value="en">English</option>
+          <option value="tr">Türkçe</option>
+          <option value="ur">اردو</option>
+          <option value="sd">سنڌي</option>
+        </select>
+      </label>
+      <button id="export" class="outline-btn" data-i18n="exportCsv">Export CSV</button>
     </div>
   </header>
 
-  <main class="app-shell">
+  <main class="page">
+    <section class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow" data-i18n="eyebrow">FIND THE GAP</span>
+        <h1 data-i18n="heroTitle">Find businesses that are ready for a better web presence.</h1>
+        <p data-i18n="heroBody">
+          Search any market, spot missing or weak websites, collect contact and social channels, then move the best opportunities into outreach.
+        </p>
+      </div>
+
+      <div class="hero-stamp" aria-hidden="true">
+        <span>V3</span>
+        <strong>LIVE</strong>
+      </div>
+    </section>
+
     <section class="search-card" aria-labelledby="search-title">
-      <div class="search-heading">
+      <div class="section-heading">
         <div>
-          <p class="kicker">SEARCH</p>
-          <h1 id="search-title">Where should we look?</h1>
+          <span class="section-index">01</span>
+          <div>
+            <p class="kicker" data-i18n="searchKicker">SEARCH MARKET</p>
+            <h2 id="search-title" data-i18n="searchTitle">Where should Nishan look?</h2>
+          </div>
         </div>
-        <p id="areaLabel">Choose a market and industry. Results come from live open data.</p>
+        <p id="areaLabel" data-i18n="searchHelp">Choose a city, industry and radius. No API key required.</p>
       </div>
 
       <div class="search-grid">
         <label>
-          <span>Country</span>
-          <input id="country" placeholder="Germany" autocomplete="country-name">
+          <span data-i18n="country">Country</span>
+          <input id="country" placeholder="Pakistan" autocomplete="country-name">
         </label>
-        <label class="city-field">
-          <span>City / area</span>
-          <input id="city" placeholder="Berlin" autocomplete="address-level2">
-        </label>
+
         <label>
-          <span>Industry</span>
+          <span data-i18n="cityArea">City / area</span>
+          <input id="city" placeholder="Karachi" autocomplete="address-level2">
+        </label>
+
+        <label>
+          <span data-i18n="industry">Industry</span>
           <select id="category"></select>
         </label>
+
         <label>
-          <span>Radius</span>
+          <span data-i18n="radius">Radius</span>
           <select id="radius_km">
             <option value="10">10 km</option>
             <option value="20" selected>20 km</option>
@@ -56,34 +87,45 @@
             <option value="50">50 km</option>
           </select>
         </label>
+
         <button id="discover" class="primary-btn">
-          <span class="buttonText">Find leads</span>
+          <span class="buttonText" data-i18n="findLeads">Find leads</span>
           <span class="spinner" aria-hidden="true"></span>
         </button>
       </div>
     </section>
 
     <section class="results-shell">
-      <div class="results-toolbar">
+      <div class="section-heading results-heading">
         <div>
-          <p class="kicker">RESULTS</p>
-          <h2>Best opportunities</h2>
-          <p id="count" class="muted"></p>
+          <span class="section-index">02</span>
+          <div>
+            <p class="kicker" data-i18n="resultsKicker">OPPORTUNITIES</p>
+            <h2 data-i18n="resultsTitle">Best leads first.</h2>
+            <p id="count" class="muted"></p>
+          </div>
         </div>
+
         <div class="filter-row" aria-label="Lead filters">
-          <button class="filter-chip active" data-filter="">All</button>
-          <button class="filter-chip" data-filter="missing">No website</button>
-          <button class="filter-chip" data-filter="weak">Weak website</button>
-          <label class="score-filter">Score <input id="min_score" type="number" min="0" max="100" value="0"></label>
+          <button class="filter-chip active" data-filter="" data-i18n="all">All</button>
+          <button class="filter-chip" data-filter="missing" data-i18n="noSite">No site found</button>
+          <button class="filter-chip" data-filter="weak" data-i18n="weakSite">Weak site</button>
+          <button class="filter-chip" id="socialFilter" data-social-filter="1" data-i18n="hasSocial">Has social</button>
+
+          <label class="score-filter">
+            <span data-i18n="score">Score</span>
+            <input id="min_score" type="number" min="0" max="100" value="0">
+          </label>
+
           <select id="pipeline_status" aria-label="Pipeline stage">
-            <option value="">All stages</option>
-            <option value="new">New</option>
-            <option value="reviewed">Reviewed</option>
-            <option value="contacted">Contacted</option>
-            <option value="replied">Replied</option>
-            <option value="proposal">Proposal</option>
-            <option value="won">Won</option>
-            <option value="lost">Lost</option>
+            <option value="" data-i18n="allStages">All stages</option>
+            <option value="new" data-i18n="stageNew">New</option>
+            <option value="reviewed" data-i18n="stageReviewed">Reviewed</option>
+            <option value="contacted" data-i18n="stageContacted">Contacted</option>
+            <option value="replied" data-i18n="stageReplied">Replied</option>
+            <option value="proposal" data-i18n="stageProposal">Proposal</option>
+            <option value="won" data-i18n="stageWon">Won</option>
+            <option value="lost" data-i18n="stageLost">Lost</option>
           </select>
         </div>
       </div>
@@ -94,21 +136,27 @@
         <table class="lead-table">
           <thead>
             <tr>
-              <th>Business</th>
-              <th>Website</th>
-              <th>Contact</th>
-              <th>Stage</th>
-              <th class="score-col">Score</th>
+              <th data-i18n="business">Business</th>
+              <th data-i18n="webPresence">Web presence</th>
+              <th data-i18n="channels">Channels</th>
+              <th data-i18n="stage">Stage</th>
+              <th class="score-col" data-i18n="score">Score</th>
             </tr>
           </thead>
           <tbody id="leads"></tbody>
         </table>
+
         <div id="emptyResults" class="empty-state hidden">
-          <div class="empty-icon">⌕</div>
-          <h3>No leads yet</h3>
-          <p>Run a search above. Pick any city and one of the supported industries.</p>
+          <div class="empty-symbol">N</div>
+          <h3 data-i18n="emptyTitle">No leads yet.</h3>
+          <p data-i18n="emptyBody">Start with a city and industry above.</p>
         </div>
       </div>
+    </section>
+
+    <section class="product-note">
+      <strong data-i18n="privacyTitle">Local-first by default.</strong>
+      <span data-i18n="privacyBody">Lead data stays in your local SQLite database. Messages are drafted, never auto-sent.</span>
     </section>
   </main>
 
@@ -117,10 +165,10 @@
     <div class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
       <div class="drawer-head">
         <div>
-          <p class="kicker">LEAD</p>
-          <h2 id="drawerTitle">Lead detail</h2>
+          <p class="kicker" data-i18n="leadKicker">LEAD PROFILE</p>
+          <h2 id="drawerTitle">Lead</h2>
         </div>
-        <button class="icon-btn" data-close-drawer aria-label="Close lead detail">×</button>
+        <button class="icon-btn" data-close-drawer aria-label="Close">×</button>
       </div>
       <div id="detail" class="drawer-body"></div>
     </div>
