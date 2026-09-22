@@ -1,4 +1,4 @@
-# LeadScout 6.0 — Agent Integration
+# LeadScout 7.0 — Agent Integration
 
 LeadScout has two agent surfaces:
 
@@ -53,8 +53,9 @@ The high-level autonomous workflow is:
 4. contact/social enrichment
 5. optional rating/review reputation enrichment
 6. website audit
-7. intelligence scoring
-8. outreach draft
+7. SEO / AEO / GEO / AI visibility + Opportunity Gap scoring
+8. intelligence scoring
+9. outreach draft
 9. CRM activity
 10. Excel export
 
@@ -122,3 +123,14 @@ LeadScout exposes Facebook and Instagram OAuth separately.
 - Actual MCP sending additionally requires `LEADSCOUT_MCP_ALLOW_SEND=1`.
 
 CRM message lifecycle can record `sent`, `delivered`, `replied`, `rejected`, `bounced`, and `no_response`. Signed Meta webhook events update matched replies/delivery events automatically; `refresh_no_response_statuses` can mark old sent/delivered leads with no reply.
+
+
+## Visibility-aware agent filtering
+
+`list_leads` supports minimum SEO, AEO, GEO, AI Visibility and Opportunity Gap filters.
+
+`run_sales_agent` supports `min_opportunity_gap`. Leads below that post-audit threshold are skipped before outreach.
+
+Example:
+
+> Find Karachi dentists, verify missing websites, audit existing sites, and only prepare outreach for leads with Opportunity Gap >= 70.
