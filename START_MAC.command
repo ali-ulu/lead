@@ -1,3 +1,4 @@
 #!/bin/bash
+set -e
 cd "$(dirname "$0")"
-python3 LeadScout.py
+python3 bootstrap.py
