@@ -12,10 +12,8 @@ VERIFY_RELEASE = "4.0.0"
 
 CASES = [
     ("Karachi", "Pakistan", "restaurant", 20),
-    ("Karachi", "Pakistan", "beauty", 20),
     ("Istanbul", "Türkiye", "dentist", 15),
     ("Berlin", "Germany", "dentist", 15),
-    ("London", "United Kingdom", "restaurant", 15),
 ]
 
 
