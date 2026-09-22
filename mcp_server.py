@@ -59,6 +59,8 @@ def list_leads(search_id:str="",ids:list[int]|None=None,country:str="",city:str=
                website_status:str="",pipeline_status:str="",engagement_status:str="",min_score:int=0,
                min_seo_score:int=0,min_aeo_score:int=0,min_geo_score:int=0,
                min_ai_visibility_score:int=0,min_opportunity_gap_score:int=0,
+               max_seo_score:int=0,max_aeo_score:int=0,max_geo_score:int=0,
+               max_ai_visibility_score:int=0,
                has_social:bool=False,contactable:bool=False,offset:int=0,page_size:int=100) -> dict[str,Any]:
     """List/filter leads with pagination."""
     initialize()
@@ -67,6 +69,8 @@ def list_leads(search_id:str="",ids:list[int]|None=None,country:str="",city:str=
                      engagement_status=engagement_status,min_score=min_score,
                      min_seo_score=min_seo_score,min_aeo_score=min_aeo_score,min_geo_score=min_geo_score,
                      min_ai_visibility_score=min_ai_visibility_score,min_opportunity_gap_score=min_opportunity_gap_score,
+                     max_seo_score=max_seo_score,max_aeo_score=max_aeo_score,max_geo_score=max_geo_score,
+                     max_ai_visibility_score=max_ai_visibility_score,
                      has_social=has_social,contactable=contactable)
     offset=max(0,int(offset)); page_size=max(1,min(500,int(page_size))); page=rows[offset:offset+page_size]
     return {"total":len(rows),"offset":offset,"page_size":page_size,
