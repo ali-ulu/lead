@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import sqlite3
+import uuid
 from pathlib import Path
 from typing import Any
 from .scoring import calculate_score
@@ -77,6 +78,21 @@ def upsert_leads(rows: list[dict[str, Any]]) -> list[int]:
         conn.commit()
     return ids
 
+def record_search_run(*, country: str, city: str, category: str, radius_km: int, lead_ids: list[int]) -> str:
+    search_id = uuid.uuid4().hex
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO search_runs(id,country,city,category,radius_km,result_count) VALUES (?,?,?,?,?,?)",
+            (search_id, country, city, category, int(radius_km), len(lead_ids)),
+        )
+        conn.executemany(
+            "INSERT OR IGNORE INTO search_run_leads(search_id,lead_id) VALUES (?,?)",
+            [(search_id, int(lead_id)) for lead_id in lead_ids],
+        )
+        conn.commit()
+    return search_id
+
+
 def list_leads(filters: dict[str, str]) -> list[dict[str, Any]]:
     clauses = ["do_not_contact = 0"]
     args: list[Any] = []
@@ -85,6 +101,11 @@ def list_leads(filters: dict[str, str]) -> list[dict[str, Any]]:
         if value:
             clauses.append(f"LOWER({field}) LIKE LOWER(?)")
             args.append(f"%{value}%")
+    search_id = filters.get("search_id", "").strip()
+    if search_id:
+        clauses.append("id IN (SELECT lead_id FROM search_run_leads WHERE search_id = ?)")
+        args.append(search_id)
+
     ids_raw = filters.get("ids", "").strip()
     if ids_raw:
         ids = []
@@ -152,5 +173,7 @@ def update_lead(lead_id: int, fields: dict[str, Any]) -> dict[str, Any] | None:
 
 def clear_all() -> None:
     with connect() as conn:
+        conn.execute("DELETE FROM search_run_leads")
+        conn.execute("DELETE FROM search_runs")
         conn.execute("DELETE FROM leads")
         conn.commit()
