@@ -19,7 +19,7 @@ def get(path: str) -> bytes:
 def main() -> None:
     health = json.loads(get("/api/v1/health"))
     assert health["name"] == "LeadScout"
-    assert health["version"] == "6.0.0"
+    assert health["version"] == "7.0.0"
 
     spec = json.loads(get("/api/v1/openapi.json"))
     assert "/api/v1/search" in spec["paths"]
