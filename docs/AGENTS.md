@@ -106,3 +106,17 @@ Social handles found during research are discovery data, not message recipient I
 Incoming reply/delivery events can update the CRM timeline when stored recipient or external message IDs match.
 
 Autonomous sending is not implicitly enabled.
+
+
+## Meta send eligibility
+
+LeadScout exposes Facebook and Instagram OAuth separately.
+
+- Instagram: official API messaging starts from an existing conversation; the Instagram user must have messaged the connected professional account before the API can send a reply.
+- Facebook Messenger: the recipient must be an eligible Page-scoped user and the send must satisfy Meta's messaging-window/permission rules.
+- A discovered social profile URL is research data, not a recipient id.
+- `messaging_eligibility_for_lead` checks whether LeadScout has a stored eligible recipient id.
+- `link_messaging_recipient` exists for associating a real conversation id with a lead.
+- Actual MCP sending additionally requires `LEADSCOUT_MCP_ALLOW_SEND=1`.
+
+CRM message lifecycle can record `sent`, `delivered`, `replied`, `rejected`, `bounced`, and `no_response`. Signed Meta webhook events update matched replies/delivery events automatically; `refresh_no_response_statuses` can mark old sent/delivered leads with no reply.
