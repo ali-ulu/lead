@@ -119,23 +119,41 @@ class PublicRedirectHandler(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, target)
 
 
-def _lighthouse(url: str, timeout: int = 75) -> dict[str, Any] | None:
-    binary = os.environ.get("LEADSCOUT_LIGHTHOUSE_BIN", "").strip() or shutil.which("lighthouse")
-    if not binary:
+def _lighthouse(url: str, timeout: int = 90) -> dict[str, Any] | None:
+    configured = os.environ.get("LEADSCOUT_LIGHTHOUSE_BIN", "").strip()
+    binary = configured or shutil.which("lighthouse")
+    command: list[str] | None = [binary] if binary else None
+
+    if not command:
         root = Path(__file__).resolve().parents[1]
         local = root / "node_modules" / ".bin" / ("lighthouse.cmd" if os.name == "nt" else "lighthouse")
         if local.exists():
-            binary = str(local)
-    if not binary:
+            command = [str(local)]
+
+    # Self-use convenience: if Node/npm exists, the first deep audit can fetch
+    # the pinned Lighthouse runtime without a separate manual install step.
+    if not command and os.environ.get("LEADSCOUT_LIGHTHOUSE_AUTO_NPX", "1") == "1":
+        npx = shutil.which("npx")
+        if npx:
+            command = [npx, "--yes", "lighthouse@13.5.0"]
+
+    if not command:
         return None
+
     try:
         proc = subprocess.run(
-            [
-                binary, url, "--quiet", "--output=json", "--output-path=stdout",
+            command + [
+                url,
+                "--quiet",
+                "--output=json",
+                "--output-path=stdout",
                 "--only-categories=performance,accessibility,best-practices,seo",
                 "--chrome-flags=--headless --no-sandbox --disable-gpu",
             ],
-            capture_output=True, text=True, timeout=timeout, check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
         )
         if proc.returncode != 0 or not proc.stdout.strip():
             return None
