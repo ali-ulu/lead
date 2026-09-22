@@ -90,7 +90,7 @@ def _build_query(south: float, west: float, north: float, east: float, category:
         raise ValueError(f"Unsupported category: {category}")
     bbox = f"{south},{west},{north},{east}"
     parts = [f'nwr["{key}"="{value}"]({bbox});' for key, value in filters]
-    return f'[out:json][timeout:{timeout}];({"".join(parts)});out center tags 250;'
+    return f'[out:json][timeout:{timeout}];({"".join(parts)});out tags center qt;'
 
 def _build_around_query(lat: float, lon: float, radius_m: int, category: str, timeout: int) -> str:
     filters = CATEGORY_FILTERS.get(category)
@@ -98,7 +98,7 @@ def _build_around_query(lat: float, lon: float, radius_m: int, category: str, ti
         raise ValueError(f"Unsupported category: {category}")
     radius_m = max(1000, min(50000, int(radius_m)))
     parts = [f'nwr["{key}"="{value}"](around:{radius_m},{lat},{lon});' for key, value in filters]
-    return f'[out:json][timeout:{timeout}];({"".join(parts)});out center tags 250;'
+    return f'[out:json][timeout:{timeout}];({"".join(parts)});out tags center qt;'
 
 def _fetch(query: str, timeout: int) -> dict[str, Any]:
     payload = urllib.parse.urlencode({"data": query}).encode()
@@ -116,7 +116,7 @@ def _fetch(query: str, timeout: int) -> dict[str, Any]:
             last_error = exc
     raise RuntimeError(f"OpenStreetMap query failed: {last_error}")
 
-def _normalize(data: dict[str, Any], category: str, city: str, country: str, limit: int) -> list[dict[str, Any]]:
+def _normalize(data: dict[str, Any], category: str, city: str, country: str, limit: int | None = None) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
     for element in data.get("elements", []):
@@ -153,7 +153,7 @@ def _normalize(data: dict[str, Any], category: str, city: str, country: str, lim
             break
     return out
 
-def search_bbox(south: float, west: float, north: float, east: float, category: str, city: str = "", country: str = "", timeout: int = 35, limit: int = 250) -> list[dict[str, Any]]:
+def search_bbox(south: float, west: float, north: float, east: float, category: str, city: str = "", country: str = "", timeout: int = 35, limit: int | None = None) -> list[dict[str, Any]]:
     return _normalize(_fetch(_build_query(south, west, north, east, category, timeout), timeout), category, city, country, limit)
 
 def search_around(lat: float, lon: float, radius_km: int, category: str, city: str = "", country: str = "", timeout: int = 35, limit: int = 250) -> list[dict[str, Any]]:
