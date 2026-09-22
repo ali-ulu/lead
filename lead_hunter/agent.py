@@ -50,6 +50,10 @@ def run_sales_job(
     top_n: int=50,
     min_score: int=40,
     min_opportunity_gap: int=0,
+    max_seo_score: int=0,
+    max_aeo_score: int=0,
+    max_geo_score: int=0,
+    max_ai_visibility_score: int=0,
     lang: str="en",
     verify_missing: bool=True,
     audit_websites: bool=True,
@@ -96,6 +100,39 @@ def run_sales_job(
                     "opportunity_gap_score":current.get("opportunity_gap_score"),
                 })
                 continue
+
+            max_visibility = {
+                "seo_score": max_seo_score,
+                "aeo_score": max_aeo_score,
+                "geo_score": max_geo_score,
+                "ai_visibility_score": max_ai_visibility_score,
+            }
+            exceeded = next(
+                (
+                    (field, int(current.get(field)))
+                    for field, threshold in max_visibility.items()
+                    if threshold and current.get(field) is not None and int(current.get(field)) > int(threshold)
+                ),
+                None,
+            )
+            missing_required = next(
+                (
+                    field for field, threshold in max_visibility.items()
+                    if threshold and current.get(field) is None
+                ),
+                None,
+            )
+            if exceeded or missing_required:
+                processed.append({
+                    "lead_id":lead_id,
+                    "name":current.get("name"),
+                    "skipped":True,
+                    "reason":"visibility_above_target" if exceeded else "visibility_not_scored",
+                    "field":exceeded[0] if exceeded else missing_required,
+                    "value":exceeded[1] if exceeded else None,
+                    "threshold":max_visibility[exceeded[0] if exceeded else missing_required],
+                })
+                continue
             draft=draft_outreach(lead_id,lang)
             action={"lead_id":lead_id,"name":current.get("name"),"score":current.get("lead_score"),
                     "commercial_score":current.get("commercial_score"),
@@ -119,7 +156,15 @@ def run_sales_job(
             processed.append(action)
             add_activity(lead_id,kind="agent",status="processed",metadata={"job_id":job_id})
 
-        export_rows=query_leads(search_id=search["search_id"],min_score=min_score)
+        export_rows=query_leads(
+            search_id=search["search_id"],
+            min_score=min_score,
+            min_opportunity_gap_score=min_opportunity_gap,
+            max_seo_score=max_seo_score,
+            max_aeo_score=max_aeo_score,
+            max_geo_score=max_geo_score,
+            max_ai_visibility_score=max_ai_visibility_score,
+        )
         out_dir=ROOT/"exports"; out_dir.mkdir(parents=True,exist_ok=True)
         export_path=out_dir/f"leadscout-agent-{job_id[:8]}.xlsx"
         export_path.write_bytes(xlsx_bytes(export_rows))
