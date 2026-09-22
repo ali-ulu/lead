@@ -209,15 +209,17 @@ def _fetch_tile_rows(
     max_depth: int = 0,
 ) -> list[dict[str, Any]]:
     # Public Overpass instances are best-effort shared infrastructure.
-    # A single slow tile must not make the whole user search fail.
-    tile_timeout = min(timeout, 15)
+    # A slow tile must not make the whole user search fail or block for minutes.
+    tile_timeout = min(timeout, 10)
+    endpoint_index = int(abs((south + west + north + east) * 1000)) % len(OVERPASS_URLS)
     try:
-        data = _fetch(
+        data = _fetch_one(
+            OVERPASS_URLS[endpoint_index],
             _build_query(south, west, north, east, category, tile_timeout),
             tile_timeout,
         )
         return _normalize(data, category, city, country, None)
-    except RuntimeError:
+    except Exception:
         return []
 
 
@@ -261,30 +263,19 @@ def _search_tiled_around(
 def search_around(lat: float, lon: float, radius_km: int, category: str, city: str = "", country: str = "", timeout: int = 35, limit: int | None = None) -> list[dict[str, Any]]:
     radius_km = max(1, min(100, int(radius_km)))
 
-    # Dense markets get one short uncapped probe first. If that cannot finish
-    # quickly, fall back immediately to smaller tiles instead of waiting through
-    # full timeouts on multiple public endpoints.
-    if category in DENSE_CATEGORIES and radius_km >= 10:
-        probe_timeout = min(timeout, 12)
-        try:
-            data = _fetch_one(
-                OVERPASS_URLS[0],
-                _build_around_query(lat, lon, radius_km * 1000, category, probe_timeout),
-                probe_timeout,
-            )
-            return _normalize(data, category, city, country, limit)
-        except Exception:
-            return _search_tiled_around(
-                lat, lon, radius_km, category, city, country, timeout, limit
-            )
-
+    # One short uncapped probe first. If the shared provider is slow,
+    # switch quickly to smaller best-effort tiles instead of waiting through
+    # long timeouts on multiple public endpoints.
+    probe_timeout = min(timeout, 12)
     try:
-        return _normalize(
-            _fetch(_build_around_query(lat, lon, radius_km * 1000, category, timeout), timeout),
-            category,
-            city,
-            country,
-            limit,
+        data = _fetch_one(
+            OVERPASS_URLS[0],
+            _build_around_query(lat, lon, radius_km * 1000, category, probe_timeout),
+            probe_timeout,
         )
-    except RuntimeError:
-        return _search_tiled_around(lat, lon, radius_km, category, city, country, timeout, limit)
+        return _normalize(data, category, city, country, limit)
+    except Exception:
+        return _search_tiled_around(
+            lat, lon, radius_km, category, city, country, timeout, limit
+        )
+
