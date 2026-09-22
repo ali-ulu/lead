@@ -19,11 +19,12 @@ def get(path: str) -> bytes:
 def main() -> None:
     health = json.loads(get("/api/v1/health"))
     assert health["name"] == "LeadScout"
-    assert health["version"] == "5.1.0"
+    assert health["version"] == "6.0.0"
 
     spec = json.loads(get("/api/v1/openapi.json"))
     assert "/api/v1/search" in spec["paths"]
     assert "/api/v1/export.xlsx" in spec["paths"]
+    assert "/api/v1/leads/{lead_id}/reputation" in spec["paths"]
 
     workbook = get("/api/v1/export.xlsx")
     with zipfile.ZipFile(io.BytesIO(workbook)) as zf:
