@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "LeadScout Agent API",
-    "version": "5.0.0",
-    "description": "Local-first multi-source lead discovery, verification, contact enrichment, website auditing, CRM, Meta messaging and autonomous agent workflows."
+    "version": "5.1.0",
+    "description": "Local-first multi-source lead discovery, verification, enrichment, Lighthouse-capable auditing, CRM lifecycle, separate Facebook/Instagram OAuth, Meta messaging, REST agent API and MCP."
   },
   "servers": [
     {
@@ -290,16 +290,6 @@
         }
       }
     },
-    "/api/v1/oauth/meta/start": {
-      "get": {
-        "summary": "Start Meta OAuth",
-        "responses": {
-          "302": {
-            "description": "Redirect to Meta"
-          }
-        }
-      }
-    },
     "/api/v1/oauth/connections": {
       "get": {
         "summary": "List connected Facebook Page / Instagram Business accounts",
@@ -356,6 +346,195 @@
         "responses": {
           "200": {
             "description": "Cleared"
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/meta/facebook/start": {
+      "get": {
+        "summary": "Start Facebook Login for Messenger/Page access",
+        "responses": {
+          "302": {
+            "description": "Redirect to Facebook OAuth"
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/meta/instagram/start": {
+      "get": {
+        "summary": "Start Instagram Login for a professional account",
+        "responses": {
+          "302": {
+            "description": "Redirect to Instagram OAuth"
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/meta/facebook/callback": {
+      "get": {
+        "summary": "Facebook OAuth callback",
+        "responses": {
+          "302": {
+            "description": "Redirect to UI"
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/meta/instagram/callback": {
+      "get": {
+        "summary": "Instagram OAuth callback",
+        "responses": {
+          "302": {
+            "description": "Redirect to UI"
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/meta": {
+      "get": {
+        "summary": "Meta webhook verification handshake",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "facebook",
+                "instagram"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "hub.challenge"
+          }
+        }
+      },
+      "post": {
+        "summary": "Receive signed Meta messaging webhook events",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "facebook",
+                "instagram"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Processed"
+          },
+          "401": {
+            "description": "Invalid X-Hub-Signature-256"
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{lead_id}/messaging-eligibility": {
+      "get": {
+        "summary": "Check if a lead has an eligible Meta recipient id",
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "facebook",
+                "instagram"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Eligibility"
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{lead_id}/messaging-recipient": {
+      "post": {
+        "summary": "Associate an eligible Meta recipient/conversation id with a lead",
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "provider",
+                  "recipient_id"
+                ],
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "facebook",
+                      "instagram"
+                    ]
+                  },
+                  "recipient_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Linked"
+          }
+        }
+      }
+    },
+    "/api/v1/crm/refresh-no-response": {
+      "post": {
+        "summary": "Mark stale sent/delivered leads with no reply as no_response",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "days": {
+                    "type": "integer",
+                    "default": 7
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated leads"
           }
         }
       }
