@@ -317,6 +317,65 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
                 performance_score = _speed_proxy(elapsed)
             if lighthouse_seo is not None:
                 seo_score = lighthouse_seo
+            schema_types, schema_fields = _structured_data(parser.jsonld_blocks)
+            business_schema = any(
+                t == "LocalBusiness"
+                or t.endswith("Business")
+                or t in {"Restaurant","Dentist","MedicalBusiness","ProfessionalService","Store","Hotel"}
+                for t in schema_types
+            )
+            organization_schema = "Organization" in schema_types
+            body_text = " ".join(parser.text_parts)
+            words = re.findall(r"\b[\w'-]+\b", body_text, flags=re.UNICODE)
+            question_headings = sum(
+                1 for heading in parser.heading_texts
+                if "?" in heading or heading.lower().startswith((
+                    "what ","why ","how ","when ","where ","who ","can ","do ","does ","is ","are ",
+                    "nedir ","nasıl ","neden ","ne zaman ","nerede ","kim ","کیا ","کیسے ","ڇا ","ڪيئن "
+                ))
+            )
+            final_host = (urllib.parse.urlparse(final).hostname or "").lower().removeprefix("www.")
+            external_hosts: set[str] = set()
+            for href in parser.hrefs:
+                if not href.startswith(("http://","https://")):
+                    continue
+                host = (urllib.parse.urlparse(href).hostname or "").lower().removeprefix("www.")
+                if host and host != final_host and not host.endswith("." + final_host):
+                    external_hosts.add(host)
+            fact_signals = len(re.findall(r"(?<!\w)(?:\d+[\d.,%]*|[$€£₺₨]\s?\d+)(?!\w)", body_text))
+            year_now = datetime.now(timezone.utc).year
+            fresh_signal = any(str(year_now) in value or str(year_now - 1) in value for value in parser.time_values)
+            if latest_year and latest_year >= year_now - 1:
+                fresh_signal = True
+
+            visibility_evidence = {
+                "indexable": not parser.robots_noindex,
+                "title": title,
+                "meta_description": parser.meta_description,
+                "h1_count": parser.h1,
+                "h2_h3_count": parser.h2 + parser.h3,
+                "canonical": parser.canonical,
+                "has_https": final.startswith("https://"),
+                "mobile_ok": parser.viewport,
+                "performance_score": performance_score,
+                "lighthouse_seo_score": lighthouse_seo,
+                "word_count": len(words),
+                "question_headings": question_headings,
+                "business_schema": business_schema,
+                "organization_schema": organization_schema,
+                "schema_types": schema_types,
+                "schema_fields": schema_fields,
+                "external_links": len(external_hosts),
+                "fact_signals": fact_signals,
+                "author_signal": parser.meta_author,
+                "fresh_signal": fresh_signal,
+                "semantic_main": parser.semantic_main,
+                "social_count": len(parser.social_links),
+                "contact_signal": parser.tel or parser.contact or parser.forms > 0,
+            }
+            visibility = calculate_visibility(visibility_evidence, commercial_score=0)
+            seo_score = visibility["seo_score"]
+
             weak = (
                 len(quality_flags) >= 2
                 or (not parser.viewport)
@@ -334,7 +393,15 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
                 "accessibility_score": accessibility_score,
                 "best_practices_score": (lighthouse or {}).get("best_practices_score"),
                 "seo_score": seo_score,
-                "audit_engine": "lighthouse+heuristic" if lighthouse else "heuristic",
+                "lighthouse_seo_score": lighthouse_seo,
+                "aeo_score": visibility["aeo_score"],
+                "geo_score": visibility["geo_score"],
+                "ai_visibility_score": visibility["ai_visibility_score"],
+                "opportunity_gap_score": visibility["opportunity_gap_score"],
+                "visibility_reasons": visibility["visibility_reasons"],
+                "visibility_signals": visibility["visibility_signals"],
+                "visibility_score_note": visibility["score_note"],
+                "audit_engine": "lighthouse+visibility+heuristic" if lighthouse else "visibility+heuristic",
                 "mobile_ok": parser.viewport,
                 "has_cta": parser.tel or parser.contact or parser.forms > 0,
                 "has_booking": parser.booking,
