@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "LeadScout Agent API",
-    "version": "4.0.0",
-    "description": "Local-first API for searching businesses, inspecting leads, auditing public websites, drafting outreach, updating pipeline stages, and exporting lead data. Search responses include a scalable search_id so thousands of results do not need to be passed as URL IDs."
+    "version": "5.0.0",
+    "description": "Local-first multi-source lead discovery, verification, contact enrichment, website auditing, CRM, Meta messaging and autonomous agent workflows."
   },
   "servers": [
     {
@@ -26,15 +26,14 @@
         "summary": "List supported business categories",
         "responses": {
           "200": {
-            "description": "Category list"
+            "description": "Categories"
           }
         }
       }
     },
     "/api/v1/search": {
       "post": {
-        "summary": "Search a city/area for businesses",
-        "description": "No application-level result cap is applied unless max_results is explicitly provided. The response includes search_id. Use search_id with lead-list and export endpoints for the complete stored result set; the optional ids field is only a compatibility preview and may be truncated.",
+        "summary": "Search OSM + Overture and merge/dedupe results",
         "requestBody": {
           "required": true,
           "content": {
@@ -58,16 +57,23 @@
                   "radius_km": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 100,
-                    "default": 20
+                    "maximum": 100
                   },
                   "max_results": {
                     "type": [
                       "integer",
                       "null"
-                    ],
-                    "minimum": 1,
-                    "description": "Optional explicit cap. Omit for no app cap."
+                    ]
+                  },
+                  "providers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "osm",
+                        "overture"
+                      ]
+                    }
                   }
                 }
               }
@@ -76,47 +82,17 @@
         },
         "responses": {
           "200": {
-            "description": "Search result with lead IDs"
+            "description": "Search result including search_id, provider summary, partial flag and warnings"
           }
         }
       }
     },
     "/api/v1/leads": {
       "get": {
-        "summary": "List/filter locally stored leads",
+        "summary": "List/filter stored leads",
         "parameters": [
           {
             "name": "search_id",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "description": "Search-run identifier returned by POST /api/v1/search. Preferred for large result sets."
-          },
-          {
-            "name": "ids",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "description": "Comma-separated lead IDs"
-          },
-          {
-            "name": "country",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "city",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "category",
             "in": "query",
             "schema": {
               "type": "string"
@@ -126,17 +102,18 @@
             "name": "website_status",
             "in": "query",
             "schema": {
-              "type": "string",
-              "enum": [
-                "missing",
-                "unknown",
-                "weak",
-                "healthy"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "pipeline_status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "engagement_status",
             "in": "query",
             "schema": {
               "type": "string"
@@ -151,6 +128,16 @@
           },
           {
             "name": "has_social",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          },
+          {
+            "name": "contactable",
             "in": "query",
             "schema": {
               "type": "string",
@@ -183,45 +170,44 @@
         "responses": {
           "200": {
             "description": "Lead"
-          },
-          "404": {
-            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{lead_id}/verify": {
+      "post": {
+        "summary": "Cross-check a lead against Overture Places",
+        "responses": {
+          "200": {
+            "description": "Verification result"
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{lead_id}/enrich": {
+      "post": {
+        "summary": "Crawl public business pages for email, phone, social and booking links",
+        "responses": {
+          "200": {
+            "description": "Enriched lead"
           }
         }
       }
     },
     "/api/v1/leads/{lead_id}/audit": {
       "post": {
-        "summary": "Audit the lead website and enrich social channels",
-        "parameters": [
-          {
-            "name": "lead_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
+        "summary": "Audit website using Lighthouse when available plus heuristic checks",
         "responses": {
           "200": {
-            "description": "Lead and audit result"
+            "description": "Audit result"
           }
         }
       }
     },
     "/api/v1/leads/{lead_id}/message": {
       "get": {
-        "summary": "Generate a human-review outreach draft",
+        "summary": "Draft multilingual outreach",
         "parameters": [
-          {
-            "name": "lead_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          },
           {
             "name": "lang",
             "in": "query",
@@ -233,58 +219,20 @@
                 "ur",
                 "sd",
                 "de"
-              ],
-              "default": "en"
+              ]
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Draft message"
+            "description": "Draft"
           }
         }
       }
     },
     "/api/v1/leads/{lead_id}/status": {
       "post": {
-        "summary": "Update pipeline stage",
-        "parameters": [
-          {
-            "name": "lead_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "status"
-                ],
-                "properties": {
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "new",
-                      "reviewed",
-                      "contacted",
-                      "replied",
-                      "proposal",
-                      "won",
-                      "lost"
-                    ]
-                  }
-                }
-              }
-            }
-          }
-        },
+        "summary": "Update sales pipeline stage",
         "responses": {
           "200": {
             "description": "Updated lead"
@@ -292,147 +240,119 @@
         }
       }
     },
-    "/api/v1/leads/{lead_id}/dnc": {
+    "/api/v1/leads/{lead_id}/engagement": {
       "post": {
-        "summary": "Mark lead do-not-contact",
-        "parameters": [
-          {
-            "name": "lead_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
+        "summary": "Record outreach result: drafted/sent/delivered/replied/rejected/bounced/no_response",
         "responses": {
           "200": {
-            "description": "Updated state"
+            "description": "Updated lead"
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{lead_id}/follow-up": {
+      "post": {
+        "summary": "Schedule or clear follow-up",
+        "responses": {
+          "200": {
+            "description": "Updated lead"
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{lead_id}/notes": {
+      "post": {
+        "summary": "Add CRM note",
+        "responses": {
+          "200": {
+            "description": "Activity"
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{lead_id}/activities": {
+      "get": {
+        "summary": "List full CRM activity timeline",
+        "responses": {
+          "200": {
+            "description": "Timeline"
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{lead_id}/send": {
+      "post": {
+        "summary": "Send through connected Facebook/Instagram account when an eligible recipient ID exists",
+        "responses": {
+          "200": {
+            "description": "Send result"
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/meta/start": {
+      "get": {
+        "summary": "Start Meta OAuth",
+        "responses": {
+          "302": {
+            "description": "Redirect to Meta"
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/connections": {
+      "get": {
+        "summary": "List connected Facebook Page / Instagram Business accounts",
+        "responses": {
+          "200": {
+            "description": "Connections"
+          }
+        }
+      }
+    },
+    "/api/v1/agent/run": {
+      "post": {
+        "summary": "Run autonomous search -> verify -> audit/enrich -> draft -> Excel workflow",
+        "responses": {
+          "200": {
+            "description": "Completed agent job"
+          }
+        }
+      }
+    },
+    "/api/v1/agent/jobs/{job_id}": {
+      "get": {
+        "summary": "Inspect stored agent job",
+        "responses": {
+          "200": {
+            "description": "Job"
+          }
+        }
+      }
+    },
+    "/api/v1/export.xlsx": {
+      "get": {
+        "summary": "Export filtered leads as Excel",
+        "responses": {
+          "200": {
+            "description": "XLSX"
           }
         }
       }
     },
     "/api/v1/export.csv": {
       "get": {
-        "summary": "Download filtered leads as CSV",
+        "summary": "Export filtered leads as CSV",
         "responses": {
           "200": {
-            "description": "CSV file"
+            "description": "CSV"
           }
-        },
-        "parameters": [
-          {
-            "name": "search_id",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "description": "Export the complete stored result set from a search run."
-          },
-          {
-            "name": "ids",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "description": "Optional legacy comma-separated lead IDs."
-          },
-          {
-            "name": "website_status",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "pipeline_status",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "min_score",
-            "in": "query",
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "name": "has_social",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "1"
-              ]
-            }
-          }
-        ]
-      }
-    },
-    "/api/v1/export.xlsx": {
-      "get": {
-        "summary": "Download filtered leads as Excel XLSX",
-        "responses": {
-          "200": {
-            "description": "XLSX file"
-          }
-        },
-        "parameters": [
-          {
-            "name": "search_id",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "description": "Export the complete stored result set from a search run."
-          },
-          {
-            "name": "ids",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "description": "Optional legacy comma-separated lead IDs."
-          },
-          {
-            "name": "website_status",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "pipeline_status",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "min_score",
-            "in": "query",
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "name": "has_social",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "1"
-              ]
-            }
-          }
-        ]
+        }
       }
     },
     "/api/v1/clear": {
       "post": {
-        "summary": "Clear local lead cache/history data",
+        "summary": "Clear local lead/search/CRM data; body confirm=true required",
         "responses": {
           "200": {
             "description": "Cleared"
@@ -446,7 +366,7 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Optional. Set LEADSCOUT_API_TOKEN to require it on /api/v1/*."
+        "description": "Optional. Set LEADSCOUT_API_TOKEN to protect /api/v1 endpoints."
       }
     }
   }
