@@ -1,43 +1,65 @@
-# Nishan V3 — Kullanım
+# LeadScout 4.0 — Kullanım
 
 ## Başlat
 
-### Windows
-`START_WINDOWS.bat` dosyasına çift tıkla.
+Windows: `START_WINDOWS.bat`  
+macOS: `START_MAC.command`  
+Linux: `./start.sh`
 
-### macOS
-`START_MAC.command` dosyasına çift tıkla.
+Doğrudan:
 
-### Linux
-`./start.sh`
+```bash
+python3 LeadScout.py
+```
 
-Tarayıcı otomatik olarak `http://127.0.0.1:8787` adresini açar.
+Arayüz: `http://127.0.0.1:8787`
 
-## Kullanım
+## İnsan kullanımı
 
 1. Ülke, şehir/bölge, sektör ve yarıçap seç.
-2. **Lead bul** düğmesine bas.
-3. Sonuçları skor, site durumu, sosyal hesap ve pipeline aşamasına göre filtrele.
-4. Bir leadi aç.
-5. Telefon, e-posta, web sitesi ve bulunan sosyal medya hesaplarını incele.
-6. Web sitesi varsa **Siteyi tara** ile teknik sinyalleri kontrol et. Bu tarama sitedeki Instagram/Facebook/LinkedIn vb. sosyal linkleri de lead'e ekleyebilir.
-7. EN / TR / Urduca / Sindhice mesaj taslağı oluştur.
-8. Mesajı kopyala veya e-posta uygulamasını aç.
-9. Leadi satış akışında ilerlet.
-10. İstersen CSV dışa aktar.
+2. **Lead bul**.
+3. Site durumu, sosyal hesap, skor veya pipeline ile filtrele.
+4. Bir leadi açıp iletişim kanallarını ve sosyal hesapları incele.
+5. Web sitesi varsa site audit çalıştır.
+6. EN / TR / Urduca / Sindhice mesaj taslağı oluştur.
+7. Pipeline aşamasını güncelle.
+8. Sonuçları **Excel XLSX** veya CSV olarak indir.
 
-## Dil desteği
+Uygulama tarafında artık 250 sonuç sınırı yoktur. Açık veri sağlayıcısının döndürdüğü sonuçlar alınır.
 
-Arayüz:
-- English
-- Türkçe
-- اردو
-- سنڌي
+## Arama geçmişi
 
-Urduca ve Sindhice seçildiğinde arayüz otomatik RTL olur.
+Son aramalar yerelde tutulur. Üstteki **Geçmişi temizle** düğmesi:
+- kayıtlı aramaları,
+- aktif arama ID'lerini,
+- yerel lead cache'ini,
+- pipeline verisini
+
+temizler.
+
+## Ajan kullanımı
+
+REST / OpenAPI:
+`http://127.0.0.1:8787/api/v1`
+
+OpenAPI:
+`http://127.0.0.1:8787/api/v1/openapi.json`
+
+MCP:
+
+```bash
+python -m pip install "mcp>=2,<3"
+python mcp_server.py
+```
+
+Streamable HTTP:
+
+```bash
+python mcp_server.py --transport streamable-http --host 127.0.0.1 --port 8790
+```
+
+Ayrıntılar: `docs/AGENTS.md`.
 
 ## Gereksinim
 
-Python 3.11+.
-
-API anahtarı, n8n, Apify veya ücretli CRM gerekmez. Veriler yerel SQLite veritabanında tutulur.
+Core uygulama için Python 3.11+ yeterlidir. MCP kullanımı için opsiyonel `mcp>=2,<3` paketi gerekir.
