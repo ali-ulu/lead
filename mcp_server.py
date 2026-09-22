@@ -169,7 +169,7 @@ def send_social_message(lead_id:int,provider:str,text:str,recipient_id:str="",co
 @mcp.tool()
 def run_sales_agent(city:str,category:str,country:str="",radius_km:int=20,top_n:int=50,
                     min_score:int=40,lang:str="en",verify_missing:bool=True,
-                    audit_websites:bool=True,reputation_enrichment:bool=True,
+                    audit_websites:bool=True,reputation_enrichment:bool=False,
                     send:bool=False,send_provider:str="instagram",
                     connection_id:int|None=None) -> dict[str,Any]:
     """Run search -> verify -> audit/enrich -> draft -> Excel; optional sending is separately gated."""
