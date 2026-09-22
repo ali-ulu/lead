@@ -32,7 +32,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python -m pip install "mcp>=2,<3"
+      - run: python -m pip install -e ".[agents]"
       - run: python scripts/mcp_smoke.py
       - name: Smoke Streamable HTTP transport
         run: |
