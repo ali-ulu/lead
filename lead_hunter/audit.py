@@ -250,7 +250,12 @@ def _lighthouse(url: str, timeout: int = 90) -> dict[str, Any] | None:
                 "--chrome-flags=--headless --no-sandbox --disable-gpu",
             ],
             capture_output=True,
+            # Windows'ta varsayilan kodlama konsolunkidir (cp1254 gibi) ve Lighthouse
+            # UTF-8 baytlari yazdiginda subprocess okuyucu thread'i UnicodeDecodeError
+            # ile cokup tum ciktiyi kaybettirir; sonuc bos gelir.
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             check=False,
         )
