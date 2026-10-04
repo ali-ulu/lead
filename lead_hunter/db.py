@@ -34,9 +34,25 @@ LEAD_MIGRATIONS = {
     "notes": "TEXT",
 }
 
+class _Connection(sqlite3.Connection):
+    """sqlite3's own __exit__ ends the transaction but never closes the handle.
+
+    Every call site uses `with connect() as conn:`, so without closing here the
+    database file stays open and locked. That is invisible on Linux and fatal
+    on Windows, where the temp directory cannot be removed while a handle is
+    still open.
+    """
+
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            return super().__exit__(exc_type, exc, tb)
+        finally:
+            self.close()
+
+
 def connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, factory=_Connection)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -122,8 +138,51 @@ def upsert_leads(rows: list[dict[str, Any]]) -> list[int]:
             lead.setdefault("visibility_signals", {})
             lead = _jsonify(lead)
             values = [lead.get(c) for c in columns]
-            protected = {"source","source_id","pipeline_status","engagement_status","follow_up_at","notes"}
-            updates = ",".join(f"{c}=excluded.{c}" for c in columns if c not in protected) + ",updated_at=CURRENT_TIMESTAMP"
+
+            # upsert_leads YALNIZCA discover_businesses tarafindan cagrilir; yani
+            # buraya gelen satirlar kesif verisidir, olcum verisi degil. Bu yuzden
+            # asagidaki alanlara dokunulmaz: audit ve dogrulama sonuclari ancak
+            # audit_lead/verify_lead ile yazilir. Aksi halde her yeni arama, lead
+            # basina 30-60 sn harcanan olcum islemini geri alirdi.
+            protected = {
+                "source","source_id","pipeline_status","engagement_status",
+                "follow_up_at","notes",
+                # web kalitesi olcumleri
+                "performance_score","seo_score","aeo_score","geo_score",
+                "ai_visibility_score","opportunity_gap_score",
+                "accessibility_score","mobile_ok","has_cta","has_booking",
+                "has_https","audit_engine","visibility_reasons","visibility_signals",
+                # dogrulama ve itibar
+                "verification_status","verification_notes","rating","review_count",
+                # iletisim kanallari ve turetilmis alanlar
+                "social_url","social_links","messaging_ids","source_refs",
+                "data_confidence","contactability_score","commercial_score",
+                "intelligence_reasons","lead_score","score_reasons",
+            }
+
+            assignments: list[str] = []
+            for column in columns:
+                if column in protected:
+                    continue
+                if column == "website_status":
+                    # Gerilim (regression) olmasin. Kesif turu yalnizca "unknown"
+                    # veya "missing" getirir; daha guclu bir karar (weak) asla
+                    # geri alinmaz, ve kesfin "missing" dedigi bir leadin karari
+                    # da kendi turunde degismez.
+                    assignments.append(
+                        "website_status=CASE "
+                        "WHEN leads.website_status IS NULL THEN excluded.website_status "
+                        "WHEN leads.website_status IN ('weak','missing') "
+                        "THEN leads.website_status "
+                        "WHEN excluded.website_status IS NULL OR excluded.website_status='unknown' "
+                        "THEN leads.website_status "
+                        "ELSE excluded.website_status END"
+                    )
+                else:
+                    assignments.append(f"{column}=excluded.{column}")
+            assignments.append("updated_at=CURRENT_TIMESTAMP")
+            updates = ",".join(assignments)
+
             conn.execute(
                 f"INSERT INTO leads ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)}) "
                 f"ON CONFLICT(source,source_id) DO UPDATE SET {updates}", values,
