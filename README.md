@@ -142,6 +142,10 @@ Endpoint: `http://127.0.0.1:8790/mcp`
 
 Full guide: [docs/AGENTS.md](docs/AGENTS.md)
 
+## Roadmap
+
+Planned work, in priority order, lives in [docs/ROADMAP.md](docs/ROADMAP.md).
+
 ## Verification
 
 The repository has independent checks for:
