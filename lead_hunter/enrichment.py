@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import os
 import re
-import ssl
 import urllib.parse
 import urllib.request
 from html.parser import HTMLParser
 from typing import Any
 
-from .audit import _assert_public_host, normalize_url
+from . import netguard
+from .audit import normalize_url
 
-USER_AGENT = "Mozilla/5.0 (compatible; LeadScout/5.0; contact-enrichment)"
+USER_AGENT = netguard.USER_AGENT
+_FETCH_LIMITER = netguard.RateLimiter(netguard.default_fetch_interval())
 EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
 PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
 SOCIAL_HOSTS = {
@@ -52,10 +54,13 @@ class PageParser(HTMLParser):
             self.booking_links.append(url)
 
 def _fetch(url: str, timeout: float=10.0) -> tuple[str,str]:
-    url=normalize_url(url); _assert_public_host(url)
+    url=normalize_url(url); netguard.assert_public_url(url)
+    if os.environ.get("LEADSCOUT_RESPECT_ROBOTS","1")=="1" and not netguard.robots_allows(url):
+        raise ValueError("Blocked by robots.txt")
+    _FETCH_LIMITER.wait()
     req=urllib.request.Request(url,headers={"User-Agent":USER_AGENT,"Accept":"text/html"})
-    with urllib.request.urlopen(req,timeout=timeout,context=ssl.create_default_context()) as resp:
-        final=resp.geturl(); _assert_public_host(final)
+    with netguard.build_public_opener().open(req,timeout=timeout) as resp:
+        final=resp.geturl(); netguard.assert_public_url(final)
         raw=resp.read(1_200_000)
         return final, raw.decode(resp.headers.get_content_charset() or "utf-8",errors="replace")
 

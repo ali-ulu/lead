@@ -17,7 +17,7 @@ import json
 import os
 from pathlib import Path
 
-from lead_hunter.db import initialize, latest_search_run, lead_ids_for_search
+from lead_hunter.db import initialize, latest_search_run, lead_ids_for_search, purge_stale_leads
 from lead_hunter.diff import compare_runs, format_report
 from lead_hunter.exporters import xlsx_bytes
 from lead_hunter.providers.osm import CATEGORY_FILTERS
@@ -57,6 +57,7 @@ def run_nightly(
     out_dir: Path = DEFAULT_OUT,
     export: bool = True,
     min_score: int = 70,
+    retention_days: int = 0,
 ) -> dict:
     if not jobs:
         raise ValueError("No jobs to run. Pass --city/--category or --config.")
@@ -115,6 +116,10 @@ def run_nightly(
         if result.get("search_id"):
             export_ids.extend(lead_ids_for_search(result["search_id"]))
 
+    purged = 0
+    if retention_days > 0:
+        purged = purge_stale_leads(days=retention_days)
+
     export_path = ""
     if export and export_ids:
         leads = query_leads(ids=sorted(set(export_ids)))
@@ -128,6 +133,7 @@ def run_nightly(
         "export_path": export_path,
         "alerts": sum((r.get("diff") or {}).get("alert_count", 0) for r in results),
         "degraded_jobs": sum(1 for r in results if r.get("degraded")),
+        "purged": purged,
         "errors": [r for r in results if r.get("error")],
         "results": results,
     }
@@ -170,6 +176,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", default=str(DEFAULT_OUT))
     parser.add_argument("--no-export", action="store_true", help="Skip the XLSX export.")
     parser.add_argument("--cache-ttl", type=int, default=0, help="Enable the response cache for N seconds.")
+    parser.add_argument("--retention-days", type=int, default=0,
+                        help="Delete not-contacted leads older than N days (KVKK/GDPR retention).")
     parser.add_argument("--json", action="store_true", help="Print the report as JSON.")
     args = parser.parse_args(argv)
 
@@ -181,7 +189,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("Provide --city/--category or --config.")
 
     initialize()
-    report = run_nightly(jobs, out_dir=Path(args.out_dir), export=not args.no_export)
+    report = run_nightly(jobs, out_dir=Path(args.out_dir), export=not args.no_export,
+                         retention_days=args.retention_days)
 
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))

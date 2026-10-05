@@ -373,3 +373,39 @@ def clear_all() -> None:
     with connect() as conn:
         conn.execute("DELETE FROM lead_activities"); conn.execute("DELETE FROM search_run_leads")
         conn.execute("DELETE FROM search_runs"); conn.execute("DELETE FROM agent_jobs"); conn.execute("DELETE FROM leads"); conn.commit()
+
+
+def delete_lead(lead_id: int) -> bool:
+    """Hard-delete a lead and its activities. Used for GDPR/KVKK erasure."""
+    with connect() as conn:
+        conn.execute("DELETE FROM lead_activities WHERE lead_id=?", (int(lead_id),))
+        conn.execute("DELETE FROM search_run_leads WHERE lead_id=?", (int(lead_id),))
+        cur = conn.execute("DELETE FROM leads WHERE id=?", (int(lead_id),))
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def purge_stale_leads(*, days: int, keep_engaged: bool = True) -> int:
+    """Delete leads not updated within `days`; skip contacted/DNC when asked.
+
+    Retention is a KVKK/GDPR requirement: business contact data should not be
+    kept forever without a reason. Engaged or do-not-contact rows are kept so a
+    retention sweep never erases an active relationship or an opt-out record.
+    """
+    days = max(0, int(days))
+    cutoff = f"-{days} days"
+    clauses = ["updated_at < datetime('now', ?)"]
+    if keep_engaged:
+        clauses.append("engagement_status = 'not_contacted'")
+        clauses.append("do_not_contact = 0")
+    where = " AND ".join(clauses)
+    with connect() as conn:
+        ids = [r[0] for r in conn.execute(f"SELECT id FROM leads WHERE {where}", (cutoff,)).fetchall()]
+        for lead_id in ids:
+            conn.execute("DELETE FROM lead_activities WHERE lead_id=?", (lead_id,))
+            conn.execute("DELETE FROM search_run_leads WHERE lead_id=?", (lead_id,))
+        if ids:
+            placeholders = ",".join("?" for _ in ids)
+            conn.execute(f"DELETE FROM leads WHERE id IN ({placeholders})", ids)
+        conn.commit()
+    return len(ids)

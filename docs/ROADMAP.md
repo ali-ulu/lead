@@ -105,18 +105,20 @@ gece koşusu tek komutla çalışır.
 
 ## Faz 4 — Güvenlik ve uyum
 
-- [ ] SSRF korumasını genişlet: tüm zenginleştirme/denetim yollarında özel ağ
+- [x] SSRF korumasını genişlet: tüm zenginleştirme/denetim yollarında özel ağ
   (localhost, 169.254.x, 10.x, 172.16–31.x, 192.168.x) ve yönlendirme takibi
-  engellensin (mevcut koruma gözden geçirilip kapatılsın).
-- [ ] HTTP sunucusu: istek hız sınırı, gövde boyutu sınırı, CORS/Origin kontrolü,
-  API token'ı tüm korumalı uçlarda.
-- [ ] KVKK/GDPR: veri saklama süresi, silme/opt-out akışı, kaynak atıf
-  (OSM/Overture lisansları) dokümanda ve kodda.
-- [ ] Site denetiminde robots.txt ve nazik tarama (domain başına politeness,
-  kimlikli User-Agent).
+  engellenir; her yönlendirme adımı yeniden doğrulanır (`lead_hunter/netguard.py`).
+- [x] HTTP sunucusu: istek hız sınırı, gövde boyutu sınırı, CORS/Origin kontrolü,
+  API token'ı `/api/v1/*` üzerinde; token yokken public bind API'yi kapatır.
+- [x] KVKK/GDPR: veri saklama süresi, silme/opt-out akışı, kaynak atıf
+  (OSM/Overture lisansları) `docs/COMPLIANCE.md`; `DELETE /api/leads/{id}` ve
+  `--retention-days`.
+- [x] Site denetiminde robots.txt ve nazik tarama (domain başına politeness,
+  kimlikli User-Agent); `robots.txt`'e uyum ve `LEADSCOUT_AUDIT/FETCH_MIN_INTERVAL`.
 
-**Dosyalar:** `lead_hunter/security.py`, `server.py`, `docs/COMPLIANCE.md`,
-`tests/test_security.py`.
+**Dosyalar:** `lead_hunter/netguard.py` (yeni), `lead_hunter/audit.py`,
+`lead_hunter/enrichment.py`, `server.py`, `lead_hunter/db.py`, `scripts/nightly.py`,
+`docs/COMPLIANCE.md`, `tests/test_security.py` (yeni).
 
 **Kabul kriteri:** Güvenlik testleri (SSRF dahil) yeşil; uçlarda token zorunlu.
 
@@ -167,7 +169,7 @@ gece koşusu tek komutla çalışır.
 | 1 | Hız ve engel direnci | `[x]` |
 | 2 | Otomasyon (gece koşusu + diff) | `[x]` |
 | 3 | Veri kalitesi ve tekilleştirme | `[ ]` |
-| 4 | Güvenlik ve uyum | `[ ]` |
+| 4 | Güvenlik ve uyum | `[x]` |
 | 5 | Rapor ve ürün özellikleri | `[ ]` |
 | 6 | Geliştirici deneyimi ve test altyapısı | `[ ]` |
 
