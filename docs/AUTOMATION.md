@@ -88,7 +88,18 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: pip install -e .
+      # Each runner starts empty. Restore data/ so the previous run is still
+      # there and a diff can be produced; save it again afterwards.
+      - uses: actions/cache/restore@v4
+        with:
+          path: data/lead_hunter.db
+          key: leadscout-db-${{ github.run_id }}
+          restore-keys: leadscout-db-
       - run: python scripts/nightly.py --config nightly.json
+      - uses: actions/cache/save@v4
+        with:
+          path: data/lead_hunter.db
+          key: leadscout-db-${{ github.run_id }}
       - uses: actions/upload-artifact@v4
         with:
           name: leadscout-nightly

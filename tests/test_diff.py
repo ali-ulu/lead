@@ -77,6 +77,15 @@ class RunDiffTests(unittest.TestCase):
         self.assertIn("Good Lead", names)
         self.assertNotIn("No Phone", names)
 
+    def test_alerts_only_fire_for_new_leads(self):
+        lead = self._lead("a", "Existing")
+        first = self._run([lead])
+        second = self._run([lead])
+        report = diff.compare_runs(first, second)
+        # A qualifying lead that was already present must not re-alert nightly.
+        self.assertEqual(report["alert_count"], 0)
+        self.assertEqual(report["new_count"], 0)
+
     def test_requires_both_ids(self):
         with self.assertRaises(ValueError):
             diff.compare_runs("", "x")

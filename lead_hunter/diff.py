@@ -73,10 +73,15 @@ def compare_runs(
         elif before in {"unknown", "healthy", "weak"} and after in {"missing", "dead"}:
             website_lost.append(current[lead_id])
 
-    alerts = [
-        lead for lead in current.values()
-        if _is_high_opportunity(lead, min_score=min_score)
-    ]
+    alerts = []
+    for lead_id in sorted(new_ids):
+        lead = current.get(lead_id)
+        if not lead:
+            continue
+        snap = current_snap.get(lead_id) or {}
+        merged = {**lead, **{k: v for k, v in snap.items() if v is not None}}
+        if _is_high_opportunity(merged, min_score=min_score):
+            alerts.append(lead)
 
     report = {
         "previous_search_id": previous_search_id,

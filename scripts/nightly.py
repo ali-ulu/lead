@@ -17,7 +17,7 @@ import json
 import os
 from pathlib import Path
 
-from lead_hunter.db import initialize, lead_ids_for_search, list_search_runs
+from lead_hunter.db import initialize, latest_search_run, lead_ids_for_search
 from lead_hunter.diff import compare_runs, format_report
 from lead_hunter.exporters import xlsx_bytes
 from lead_hunter.providers.osm import CATEGORY_FILTERS
@@ -77,15 +77,23 @@ def run_nightly(
             results.append({"city": city, "category": category, "error": f"unsupported category: {category}"})
             continue
 
-        # Capture the previous run for this pair before recording a new one.
-        history = list_search_runs(city=city, country=country, category=category, limit=2)
-        previous_id = history[0]["id"] if history else ""
-
         try:
             search = _services.discover_businesses(city=city, country=country, category=category, radius_km=radius_km)
         except Exception as exc:
             results.append({"city": city, "category": category, "error": str(exc)})
             continue
+
+        # Match the previous run on the exact geocoded market, not the raw
+        # input: discovery stores the resolved city/country, so a partial or
+        # differently-spelled query would otherwise diff against the wrong run.
+        area = search.get("area") or {}
+        previous = latest_search_run(
+            city=area.get("city") or city,
+            country=area.get("country") or country,
+            category=search.get("category") or category,
+            exclude_id=search["search_id"],
+        )
+        previous_id = previous["id"] if previous else ""
 
         diff = None
         if previous_id and previous_id != search["search_id"]:

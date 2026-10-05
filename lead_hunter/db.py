@@ -332,6 +332,19 @@ def list_search_runs(*, city: str="", country: str="", category: str="", limit: 
         item["partial"]=bool(item.get("partial")); out.append(item)
     return out
 
+def latest_search_run(*, city: str, country: str, category: str, exclude_id: str = "") -> dict[str, Any] | None:
+    """Most recent run for the exact stored market, optionally excluding one id."""
+    with connect() as conn:
+        row=conn.execute(
+            "SELECT * FROM search_runs "
+            "WHERE LOWER(city)=LOWER(?) AND LOWER(country)=LOWER(?) AND LOWER(category)=LOWER(?) AND id != ? "
+            "ORDER BY created_at DESC, id DESC LIMIT 1",
+            (city,country,category,exclude_id),
+        ).fetchone()
+    if not row: return None
+    item=dict(row); item["provider_summary"]=_loads(item.get("provider_summary"),{}); item["warnings"]=_loads(item.get("warnings"),[])
+    item["partial"]=bool(item.get("partial")); return item
+
 def lead_ids_for_search(search_id: str) -> list[int]:
     with connect() as conn:
         rows=conn.execute("SELECT lead_id FROM search_run_leads WHERE search_id=?",(search_id,)).fetchall()
