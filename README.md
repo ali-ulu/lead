@@ -8,7 +8,7 @@
 - Results are merged and deduplicated by domain, phone, and name + proximity.
 - **No application-level 250-result cap.**
 - Search results expose provider counts, partial-result state and warnings.
-- **Website verification:** "No site found" is cross-checked against Overture and, when configured, a web search before it becomes a strong sales signal. A keyless DuckDuckGo lookup works out of the box; Brave Search API and self-hosted SearXNG are optional upgrades.
+- **Website verification:** "No site found" is cross-checked against Overture and, when configured, a web search before it becomes a strong sales signal. A keyless DuckDuckGo lookup runs first, with Google Programmable Search as a free fallback; Brave and self-hosted SearXNG are optional upgrades.
 - **Contact enrichment:** public business pages are scanned for email, phone, booking links and social accounts.
 - Instagram, Facebook, LinkedIn, X/Twitter, YouTube, TikTok, Telegram and WhatsApp discovery.
 - **Deep website audit:** Lighthouse performance/accessibility/best-practices plus structured content analysis.
@@ -70,25 +70,30 @@ This keeps “where is the deal?” separate from “what happened to the messag
 
 Core discovery still works without paid API keys.
 
-For general-web verification, LeadScout uses a keyless DuckDuckGo lookup by default, so website verification works out of the box. You can switch providers or upgrade:
+For general-web verification, LeadScout uses a keyless DuckDuckGo lookup first, then falls back to Google Programmable Search when its free key is configured. This keeps serial queries working even if the keyless endpoint rate-limits.
 
 ```bash
-# Default when nothing else is configured (no key, no account):
-# LEADSCOUT_WEB_SEARCH=duckduckgo
+# Default order (first provider that answers wins):
+#   1. DuckDuckGo   — keyless, no account
+#   2. Google Programmable Search — free 100 queries/day, needs a key + engine id
+# LEADSCOUT_WEB_SEARCH=duckduckgo,google
 
-# Brave Search API (best quality/rate limits): https://brave.com/search/api/
-# LEADSCOUT_WEB_SEARCH=brave
+# Google Programmable Search (Custom Search JSON API):
+# https://developers.google.com/custom-search/v1/overview
+# GOOGLE_CSE_API_KEY=...
+# GOOGLE_CSE_ID=...
+
+# Brave Search API (paid, best rate limits): https://brave.com/search/api/
 # BRAVE_SEARCH_API_KEY=...
 
 # Self-hosted SearXNG with JSON output enabled (no vendor lock-in):
-# LEADSCOUT_WEB_SEARCH=searxng
 # SEARXNG_URL=http://127.0.0.1:8080
 
 # Disable web verification entirely:
 # LEADSCOUT_WEB_SEARCH=off
 ```
 
-Precedence: an explicit `LEADSCOUT_WEB_SEARCH` wins; otherwise `BRAVE_SEARCH_API_KEY`, then `SEARXNG_URL`, then the built-in DuckDuckGo fallback. Brave and SearXNG are only contacted when configured. The DuckDuckGo lookup uses the public HTML endpoint and needs no account.
+Set `LEADSCOUT_WEB_SEARCH` to a comma-separated chain to choose and order providers explicitly, e.g. `searxng,google,duckduckgo`. When it is unset, the default chain is DuckDuckGo then Google. `off` disables web verification. If a provider fails (for example a rate limit), the next one in the chain is tried and the failures are reported in the result.
 
 For reputation enrichment:
 
