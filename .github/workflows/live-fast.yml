@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: leadscout-fast-live
+  group: leadscout-fast-live-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

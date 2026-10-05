@@ -17,8 +17,10 @@ from typing import Any
 from datetime import datetime, timezone
 
 from .visibility import calculate_visibility
+from . import netguard
 
-USER_AGENT = "Mozilla/5.0 (compatible; LeadScout/5.0; local website audit)"
+USER_AGENT = netguard.USER_AGENT
+_AUDIT_LIMITER = netguard.RateLimiter(netguard.default_audit_interval())
 
 SOCIAL_HOSTS = {
     "instagram": ("instagram.com",),
@@ -196,26 +198,11 @@ def _speed_proxy(ms: int) -> int:
     return 90
 
 def _assert_public_host(url: str) -> None:
-    parsed = urllib.parse.urlparse(url)
-    host = parsed.hostname
-    if not host:
-        raise ValueError("Invalid website hostname")
-    if host.lower() in {"localhost", "localhost.localdomain"}:
-        raise ValueError("Local/private websites are not audited")
-    try:
-        infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
-    except socket.gaierror as exc:
-        raise ValueError(f"Website hostname could not be resolved: {exc}") from exc
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-            raise ValueError("Local/private websites are not audited")
+    """Backwards-compatible alias for the shared SSRF guard."""
+    netguard.assert_public_url(url)
 
-class PublicRedirectHandler(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        target = urllib.parse.urljoin(req.full_url, newurl)
-        _assert_public_host(target)
-        return super().redirect_request(req, fp, code, msg, headers, target)
+class PublicRedirectHandler(netguard._PublicRedirectHandler):
+    pass
 
 
 def _lighthouse(url: str, timeout: int = 90) -> dict[str, Any] | None:
@@ -295,11 +282,16 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
                 "social_links": {},
             }
         raise
+    if os.environ.get("LEADSCOUT_RESPECT_ROBOTS", "1") == "1" and not netguard.robots_allows(url):
+        return {
+            "reachable": False,
+            "website_status": "blocked",
+            "error": "Blocked by robots.txt",
+            "social_links": {},
+        }
+    _AUDIT_LIMITER.wait()
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml"})
-    opener = urllib.request.build_opener(
-        urllib.request.HTTPSHandler(context=ssl.create_default_context()),
-        PublicRedirectHandler(),
-    )
+    opener = netguard.build_public_opener()
     start = time.perf_counter()
     try:
         with opener.open(req, timeout=timeout) as resp:

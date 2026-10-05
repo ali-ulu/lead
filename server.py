@@ -4,6 +4,7 @@ import json
 import mimetypes
 import os
 import threading
+import time
 import urllib.parse
 import webbrowser
 from http import HTTPStatus
@@ -13,7 +14,7 @@ from urllib.parse import parse_qs, urlparse
 
 from lead_hunter.agent import get_job, run_sales_job
 from lead_hunter.crm import add_note, list_activities, mark_stale_no_response, set_engagement, set_follow_up
-from lead_hunter.db import clear_all, get_lead, get_search_run, initialize, list_leads
+from lead_hunter.db import clear_all, delete_lead, get_lead, get_search_run, initialize, list_leads, purge_stale_leads
 from lead_hunter.doctor import run_checks
 from lead_hunter.exporters import csv_bytes, xlsx_bytes
 from lead_hunter.oauth_meta import (
@@ -33,6 +34,35 @@ STATIC = ROOT / "static"
 HOST = os.environ.get("LEADSCOUT_HOST", os.environ.get("LEAD_HUNTER_HOST", "127.0.0.1"))
 PORT = int(os.environ.get("LEADSCOUT_PORT", os.environ.get("LEAD_HUNTER_PORT", "8787")))
 API_TOKEN = os.environ.get("LEADSCOUT_API_TOKEN", "").strip()
+MAX_BODY_BYTES = int(os.environ.get("LEADSCOUT_MAX_BODY_BYTES", str(2 * 1024 * 1024)))
+_RATE_LIMIT_PER_MIN = int(os.environ.get("LEADSCOUT_HTTP_RATE_PER_MIN", "600"))
+_ALLOWED_ORIGINS = {
+    o.strip() for o in os.environ.get("LEADSCOUT_ALLOWED_ORIGINS", "").split(",") if o.strip()
+}
+_RATE_LOCK = threading.Lock()
+_RATE_HITS: dict[str, list[float]] = {}
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def _rate_limited(key: str) -> bool:
+    if _RATE_LIMIT_PER_MIN <= 0:
+        return False
+    now = time.monotonic()
+    with _RATE_LOCK:
+        hits = [t for t in _RATE_HITS.get(key, []) if now - t < 60.0]
+        if len(hits) >= _RATE_LIMIT_PER_MIN:
+            # Do not record rejected requests: otherwise a client hammering a
+            # public route grows its own hit list without bound.
+            _RATE_HITS[key] = hits
+            return True
+        hits.append(now)
+        _RATE_HITS[key] = hits
+        # Bound the table so many distinct clients cannot leak memory.
+        if len(_RATE_HITS) > 4096:
+            for stale in [k for k, v in _RATE_HITS.items() if not any(now - t < 60.0 for t in v)]:
+                _RATE_HITS.pop(stale, None)
+        return False
+
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "LeadScout/7.0"
@@ -43,8 +73,36 @@ class Handler(BaseHTTPRequestHandler):
     def _authorized(self, path: str) -> bool:
         public_prefixes=("/api/v1/oauth/meta/","/api/v1/webhooks/meta")
         if any(path.startswith(x) for x in public_prefixes): return True
-        if not API_TOKEN or not path.startswith("/api/v1/"): return True
-        return self.headers.get("Authorization","")==f"Bearer {API_TOKEN}"
+        if path in {"/api/health","/api/v1/health"}: return True
+        if not path.startswith("/api/"):
+            return True  # static files stay public so the local UI can load
+        if API_TOKEN:
+            return self.headers.get("Authorization","")==f"Bearer {API_TOKEN}"
+        # No token configured: the API is only reachable when the server is
+        # bound to loopback. Binding to a public interface without a token
+        # closes both the versioned and the legacy routes instead of exposing
+        # lead data or destructive actions like POST /api/clear.
+        return HOST in _LOOPBACK_HOSTS
+
+    def _origin_allowed(self) -> bool:
+        origin = self.headers.get("Origin", "")
+        if not origin:
+            return True
+        if origin in _ALLOWED_ORIGINS:
+            return True
+        return origin in {
+            "http://127.0.0.1:8787", "http://localhost:8787",
+            f"http://{HOST}:{PORT}", f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}",
+        }
+
+    def _cors_origin(self) -> str:
+        origin = self.headers.get("Origin", "")
+        if origin and (origin in _ALLOWED_ORIGINS or origin in {
+            "http://127.0.0.1:8787", "http://localhost:8787",
+            f"http://{HOST}:{PORT}", f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}",
+        }):
+            return origin
+        return "http://127.0.0.1"
 
     def _json(self,payload,status=200):
         body=json.dumps(payload,ensure_ascii=False).encode("utf-8")
@@ -66,9 +124,13 @@ class Handler(BaseHTTPRequestHandler):
     def _body_bytes(self):
         try:
             length=int(self.headers.get("Content-Length","0"))
-            return self.rfile.read(length) if length>0 else b""
         except Exception:
             return b""
+        if length <= 0:
+            return b""
+        if length > MAX_BODY_BYTES:
+            raise ValueError(f"Request body too large (max {MAX_BODY_BYTES} bytes)")
+        return self.rfile.read(length)
 
     @staticmethod
     def _json_from_bytes(raw: bytes):
@@ -90,13 +152,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin","http://127.0.0.1")
+        self.send_header("Access-Control-Allow-Origin",self._cors_origin())
+        self.send_header("Vary","Origin")
         self.send_header("Access-Control-Allow-Headers","Content-Type, Authorization")
-        self.send_header("Access-Control-Allow-Methods","GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods","GET, POST, DELETE, OPTIONS")
         self.end_headers()
 
     def do_GET(self):
         parsed=urlparse(self.path); path=parsed.path
+        if _rate_limited(self.client_address[0]):
+            return self._json({"error":"rate limited"},429)
+        if not self._origin_allowed(): return self._json({"error":"origin not allowed"},403)
         if not self._authorized(path): return self._json({"error":"unauthorized"},401)
 
         if path in {"/api/health","/api/v1/health"}:
@@ -193,9 +259,39 @@ class Handler(BaseHTTPRequestHandler):
 
         return self._serve_static(path)
 
+    def do_DELETE(self):
+        parsed=urlparse(self.path); path=parsed.path
+        if _rate_limited(self.client_address[0]):
+            return self._json({"error":"rate limited"},429)
+        if not self._origin_allowed(): return self._json({"error":"origin not allowed"},403)
+        if not self._authorized(path): return self._json({"error":"unauthorized"},401)
+        if (path.startswith("/api/leads/") or path.startswith("/api/v1/leads/")):
+            try: lead_id=self._lead_id(path)
+            except ValueError: return self._json({"error":"invalid id"},400)
+            return self._json({"deleted":delete_lead(lead_id)})
+        if path in {"/api/v1/retention/purge","/api/retention/purge"}:
+            raw=self._query(parsed).get("days")
+            try:
+                days=int(raw) if raw not in (None,"") else 365
+                if days < 0:
+                    raise ValueError
+            except (TypeError,ValueError):
+                return self._json({"error":"days must be a non-negative integer"},400)
+            try:
+                return self._json({"purged":purge_stale_leads(days=days)})
+            except ValueError as exc:
+                return self._json({"error":str(exc)},400)
+        return self._json({"error":"not found"},404)
+
     def do_POST(self):
         parsed=urlparse(self.path); path=parsed.path
-        raw_body=self._body_bytes()
+        if _rate_limited(self.client_address[0]):
+            return self._json({"error":"rate limited"},429)
+        if not self._origin_allowed(): return self._json({"error":"origin not allowed"},403)
+        try:
+            raw_body=self._body_bytes()
+        except ValueError as exc:
+            return self._json({"error":str(exc)},413)
         payload=self._json_from_bytes(raw_body)
         if not self._authorized(path): return self._json({"error":"unauthorized"},401)
 
