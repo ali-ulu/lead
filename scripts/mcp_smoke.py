@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 
 from mcp import Client
@@ -99,7 +100,21 @@ async def main() -> None:
         if not path or not Path(path).is_file():
             raise SystemExit(f"MCP export file missing: {export_payload!r}")
 
-        print("MCP PASS: search isolation, reputation tool, pagination and XLSX export")
+        # A gated tool must reach the client with its reason, not a bare
+        # "Error executing tool ...". The MCP SDK only forwards messages raised
+        # as ToolError, so this pins that the wrapper still classifies them.
+        os.environ.pop("LEADSCOUT_MCP_ALLOW_SEND", None)
+        gated = await client.call_tool(
+            "send_social_message",
+            {"lead_id": ids[0], "provider": "instagram", "text": "hi"},
+        )
+        if not gated.is_error:
+            raise SystemExit("send_social_message should be disabled by default")
+        gated_text = gated.content[0].text if gated.content else ""
+        if "disabled" not in gated_text:
+            raise SystemExit(f"gated tool lost its message: {gated_text!r}")
+
+        print("MCP PASS: search isolation, reputation tool, pagination, XLSX export, error messages")
 
     clear_all()
 
