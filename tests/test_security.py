@@ -43,6 +43,23 @@ class SsrfGuardTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 handler.redirect_request(req, None, 302, "Found", {}, "http://internal/")
 
+    def test_guard_connection_rejects_private_peer(self):
+        conn = netguard._GuardHTTPConnection("example.com", 80, timeout=1)
+        fake = mock.Mock()
+        fake.getpeername.return_value = ("127.0.0.1", 80)
+        with mock.patch.object(conn, "_create_connection", return_value=fake):
+            with self.assertRaises(ValueError):
+                conn.connect()
+        fake.close.assert_called_once()
+
+    def test_guard_connection_allows_public_peer(self):
+        conn = netguard._GuardHTTPConnection("example.com", 80, timeout=1)
+        fake = mock.Mock()
+        fake.getpeername.return_value = ("93.184.216.34", 80)
+        with mock.patch.object(conn, "_create_connection", return_value=fake):
+            conn.connect()
+        self.assertIs(conn.sock, fake)
+
 
 class RobotsTests(unittest.TestCase):
     def test_parse_specific_agent_rules(self):
@@ -125,6 +142,23 @@ class ServerGateTests(unittest.TestCase):
         with mock.patch.object(server, "API_TOKEN", "secret"):
             self.assertTrue(server.Handler._authorized(obj, "/index.html"))
 
+    def test_legacy_api_closed_on_public_bind(self):
+        server, obj = self._handler({})
+        with mock.patch.object(server, "API_TOKEN", ""), \
+                mock.patch.object(server, "HOST", "0.0.0.0"):
+            self.assertFalse(server.Handler._authorized(obj, "/api/leads"))
+            self.assertFalse(server.Handler._authorized(obj, "/api/clear"))
+            # health stays public so a load balancer can probe it
+            self.assertTrue(server.Handler._authorized(obj, "/api/health"))
+
+    def test_legacy_api_requires_token_when_configured(self):
+        server, obj = self._handler({})
+        with mock.patch.object(server, "API_TOKEN", "secret"), \
+                mock.patch.object(server, "HOST", "0.0.0.0"):
+            self.assertFalse(server.Handler._authorized(obj, "/api/leads"))
+            obj.headers = {"Authorization": "Bearer secret"}
+            self.assertTrue(server.Handler._authorized(obj, "/api/leads"))
+
     def test_cross_origin_rejected(self):
         server, obj = self._handler({"Origin": "https://evil.example"})
         with mock.patch.object(server, "HOST", "127.0.0.1"), \
@@ -188,6 +222,14 @@ class ErasureTests(unittest.TestCase):
         with self.db.connect() as conn:
             names = {r[0] for r in conn.execute("SELECT name FROM leads").fetchall()}
         self.assertEqual(names, {"OldEngaged", "OldDnc", "Fresh"})
+
+    def test_purge_rejects_negative_days(self):
+        self._insert("Old", updated="2020-01-01 00:00:00")
+        with self.assertRaises(ValueError):
+            self.db.purge_stale_leads(days=-1)
+        with self.db.connect() as conn:
+            remaining = conn.execute("SELECT COUNT(*) FROM leads").fetchone()[0]
+        self.assertEqual(remaining, 1)
 
 
 if __name__ == "__main__":

@@ -391,8 +391,13 @@ def purge_stale_leads(*, days: int, keep_engaged: bool = True) -> int:
     Retention is a KVKK/GDPR requirement: business contact data should not be
     kept forever without a reason. Engaged or do-not-contact rows are kept so a
     retention sweep never erases an active relationship or an opt-out record.
+
+    A negative period is rejected: clamping it to zero would silently purge
+    everything eligible from prior days instead of refusing the bad request.
     """
-    days = max(0, int(days))
+    days = int(days)
+    if days < 0:
+        raise ValueError("retention days must not be negative")
     cutoff = f"-{days} days"
     clauses = ["updated_at < datetime('now', ?)"]
     if keep_engaged:

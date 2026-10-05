@@ -291,10 +291,7 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
         }
     _AUDIT_LIMITER.wait()
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml"})
-    opener = urllib.request.build_opener(
-        urllib.request.HTTPSHandler(context=ssl.create_default_context()),
-        PublicRedirectHandler(),
-    )
+    opener = netguard.build_public_opener()
     start = time.perf_counter()
     try:
         with opener.open(req, timeout=timeout) as resp:

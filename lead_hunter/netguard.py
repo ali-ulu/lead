@@ -8,6 +8,7 @@ and a redirect handler that re-checks each hop.
 """
 from __future__ import annotations
 
+import http.client
 import ipaddress
 import os
 import socket
@@ -23,6 +24,11 @@ _PRIVATE_HOSTNAMES = {
     "localhost", "localhost.localdomain", "ip6-localhost", "ip6-loopback",
     "metadata", "metadata.google.internal",
 }
+
+
+def _is_public_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+                or ip.is_multicast or ip.is_unspecified)
 
 
 def assert_public_url(url: str, *, allow_unresolvable: bool = False) -> str:
@@ -45,15 +51,67 @@ def assert_public_url(url: str, *, allow_unresolvable: bool = False) -> str:
         raise ValueError(f"Website hostname could not be resolved: {exc}") from exc
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
-        if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
-                or ip.is_multicast or ip.is_unspecified):
+        if not _is_public_ip(ip):
             raise ValueError("Local/private websites are not audited")
     return url
 
 
+class _GuardHTTPConnection(http.client.HTTPConnection):
+    """An HTTP(S) connection that re-checks the address it actually connects to.
+
+    ``assert_public_url`` validates DNS, but the connection resolves the name a
+    second time; a name that flips between a public and a private answer
+    (DNS rebinding) would otherwise slip through. Checking the peer address on
+    the live socket closes that window.
+    """
+
+    def connect(self) -> None:
+        self.sock = self._create_connection(
+            (self.host, self.port), self.timeout, self.source_address,
+        )
+        try:
+            peer = self.sock.getpeername()[0]
+            ip = ipaddress.ip_address(peer)
+            if not _is_public_ip(ip):
+                raise ValueError("Local/private websites are not audited")
+        except ValueError:
+            self.sock.close()
+            raise
+
+
+class _GuardHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self) -> None:
+        self.sock = self._create_connection(
+            (self.host, self.port), self.timeout, self.source_address,
+        )
+        try:
+            peer = self.sock.getpeername()[0]
+            ip = ipaddress.ip_address(peer)
+            if not _is_public_ip(ip):
+                raise ValueError("Local/private websites are not audited")
+        except ValueError:
+            self.sock.close()
+            raise
+        if self._tunnel_host:
+            self._tunnel()
+        self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host)
+
+
 def build_public_opener() -> urllib.request.OpenerDirector:
-    """An opener whose redirect handler re-validates every hop."""
-    return urllib.request.build_opener(_PublicRedirectHandler())
+    """An opener that re-validates every redirect hop and the connected peer."""
+    return urllib.request.build_opener(
+        _PublicRedirectHandler(), _GuardHTTPHandler(), _GuardHTTPSHandler(),
+    )
+
+
+class _GuardHTTPHandler(urllib.request.HTTPHandler):
+    def http_open(self, req):
+        return self.do_open(_GuardHTTPConnection, req)
+
+
+class _GuardHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_GuardHTTPSConnection, req)
 
 
 class _PublicRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -126,7 +184,7 @@ def _fetch_robots(origin: str, timeout: float) -> list[str]:
     try:
         assert_public_url(robots_url)
         req = urllib.request.Request(robots_url, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with build_public_opener().open(req, timeout=timeout) as resp:
             if resp.status != 200:
                 return []
             body = resp.read(512_000).decode("utf-8", errors="replace")

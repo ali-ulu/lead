@@ -50,9 +50,18 @@ def _rate_limited(key: str) -> bool:
     now = time.monotonic()
     with _RATE_LOCK:
         hits = [t for t in _RATE_HITS.get(key, []) if now - t < 60.0]
+        if len(hits) >= _RATE_LIMIT_PER_MIN:
+            # Do not record rejected requests: otherwise a client hammering a
+            # public route grows its own hit list without bound.
+            _RATE_HITS[key] = hits
+            return True
         hits.append(now)
         _RATE_HITS[key] = hits
-        return len(hits) > _RATE_LIMIT_PER_MIN
+        # Bound the table so many distinct clients cannot leak memory.
+        if len(_RATE_HITS) > 4096:
+            for stale in [k for k, v in _RATE_HITS.items() if not any(now - t < 60.0 for t in v)]:
+                _RATE_HITS.pop(stale, None)
+        return False
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -65,18 +74,15 @@ class Handler(BaseHTTPRequestHandler):
         public_prefixes=("/api/v1/oauth/meta/","/api/v1/webhooks/meta")
         if any(path.startswith(x) for x in public_prefixes): return True
         if path in {"/api/health","/api/v1/health"}: return True
-        if not path.startswith("/api/v1/"):
-            # Legacy /api/* endpoints are protected when a token is set;
-            # static files stay public so the local UI can load.
-            if not path.startswith("/api/") or not API_TOKEN:
-                return True
-            return self.headers.get("Authorization","")==f"Bearer {API_TOKEN}"
+        if not path.startswith("/api/"):
+            return True  # static files stay public so the local UI can load
         if API_TOKEN:
             return self.headers.get("Authorization","")==f"Bearer {API_TOKEN}"
-        # No token configured: the versioned API is only reachable when the
-        # server is bound to loopback. Binding to a public interface without a
-        # token closes the API instead of exposing lead data.
-        return _LOOPBACK_HOSTS and HOST in _LOOPBACK_HOSTS
+        # No token configured: the API is only reachable when the server is
+        # bound to loopback. Binding to a public interface without a token
+        # closes both the versioned and the legacy routes instead of exposing
+        # lead data or destructive actions like POST /api/clear.
+        return HOST in _LOOPBACK_HOSTS
 
     def _origin_allowed(self) -> bool:
         origin = self.headers.get("Origin", "")
@@ -264,8 +270,17 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError: return self._json({"error":"invalid id"},400)
             return self._json({"deleted":delete_lead(lead_id)})
         if path in {"/api/v1/retention/purge","/api/retention/purge"}:
-            days=int(self._query(parsed).get("days") or 365)
-            return self._json({"purged":purge_stale_leads(days=days)})
+            raw=self._query(parsed).get("days")
+            try:
+                days=int(raw) if raw not in (None,"") else 365
+                if days < 0:
+                    raise ValueError
+            except (TypeError,ValueError):
+                return self._json({"error":"days must be a non-negative integer"},400)
+            try:
+                return self._json({"purged":purge_stale_leads(days=days)})
+            except ValueError as exc:
+                return self._json({"error":str(exc)},400)
         return self._json({"error":"not found"},404)
 
     def do_POST(self):
