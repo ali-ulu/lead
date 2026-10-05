@@ -46,9 +46,11 @@ def discover_businesses(
         if max_results<=0: max_results=None
 
     wanted=set(providers or ["osm","overture"])
+    unknown=sorted(wanted-{"osm","overture"})
     area=geocode_area(city,country)
     provider_rows: list[list[dict[str,Any]]] = []
     summary: dict[str,Any]={}; warnings=[]; partial=False
+    provider_errors: dict[str,str]={}
 
     if "osm" in wanted:
         osm=search_around_detailed(
@@ -71,14 +73,25 @@ def discover_businesses(
             summary["overture"]={"count":len(overture),"partial":False}
         except Exception as exc:
             partial=True
+            provider_errors["overture"]=str(exc)
             warnings.append(f"Overture unavailable: {exc}")
             summary["overture"]={"count":0,"partial":True,"error":str(exc)}
+
+    if unknown:
+        warnings.append(f"Unknown discovery providers ignored: {', '.join(unknown)}.")
 
     if not provider_rows:
         raise RuntimeError("No discovery provider is enabled.")
 
     rows=_intelligent(merge_leads(*provider_rows))
     if max_results is not None: rows=rows[:max_results]
+
+    degraded=partial or bool(unknown)
+    if degraded and not rows:
+        warnings.append(
+            "No businesses returned while one or more discovery providers were unavailable; "
+            "this may be missing data rather than an empty area."
+        )
     ids=upsert_leads(rows)
     search_id=record_search_run(
         country=area["country"],city=area["city"],category=category,radius_km=radius_km,
@@ -87,7 +100,8 @@ def discover_businesses(
     return {
         "ok":True,"count":len(rows),"search_id":search_id,"ids":ids[:500],"ids_truncated":len(ids)>500,
         "area":area,"category":category,"radius_km":radius_km,"result_cap":max_results,
-        "providers":summary,"partial":partial,"warnings":warnings,
+        "providers":summary,"partial":partial,"degraded":degraded,
+        "provider_errors":provider_errors,"warnings":warnings,
     }
 
 def _update_intelligence(lead_id: int, lead: dict[str,Any]) -> dict[str,Any]:

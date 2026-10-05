@@ -48,9 +48,20 @@ UI:
 http://127.0.0.1:8787
 ```
 
+### Health check
+
+Before a long run, check the install:
+
+```bash
+python -m lead_hunter.doctor        # or: leadscout-doctor
+python -m lead_hunter.doctor --json # machine-readable
+```
+
+It reports missing modules (for example `duckdb`, which silently disables Overture discovery), database state, active discovery and web-search providers, and which optional keys are set. It exits non-zero when something is wrong. `GET /api/health` returns the same provider status and a `degraded` flag.
+
 ## Data sources
 
-LeadScout uses OpenStreetMap and Overture Places by default. If a provider is unavailable, the search is marked partial and warnings are returned instead of pretending the result is complete.
+LeadScout uses OpenStreetMap and Overture Places by default. If a provider is unavailable, the search is marked partial (`degraded: true`) and warnings are returned instead of pretending the result is complete. A zero-result search is explicitly flagged when a provider was unavailable, so an empty area is not confused with missing data.
 
 A missing website, email or social field means **not found in the reviewed sources**, not proof of absence.
 

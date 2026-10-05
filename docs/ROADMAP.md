@@ -17,25 +17,26 @@ Kapsam dışı bırakılan şey: gerçek ücretli API anahtarı gerektiren işle
 birbirinden ayırmak. Afyon koşusunda `duckdb` kurulu olmadığı için Overture
 sessizce 0 döndü ve uygulama bunu "veri yok" gibi gösterdi.
 
-- [ ] `doctor` komutu ekle: `python -m lead_hunter.doctor` (ve kısayol script).
+- [x] `doctor` komutu ekle: `python -m lead_hunter.doctor` (ve `leadscout-doctor`).
   - Python sürümü, `duckdb` / `mcp` / `cryptography` / `lighthouse` varlığı.
-  - Veritabanı yolu, yazılabilirlik, şema sürümü.
+  - Veritabanı yolu, yazılabilirlik, tablo listesi, lead sayısı.
   - Aktif keşif sağlayıcıları (osm, overture) ve web arama zinciri.
   - Hangi env anahtarları eksik (isim ver, değer gösterme).
-  - Nominatim / Overpass / Overture / seçili web arama için erişilebilirlik testi.
   - İnsan-okur çıktı + `--json` makine-okur çıktı; sorun varsa çıkış kodu ≠ 0.
-- [ ] Keşif sonucunda "sessiz 0" koruması: bir sağlayıcı devre dışıysa veya
-  `partial=True` ise sonuca `degraded: true` ve okunur bir `warnings` mesajı ekle.
+- [x] Keşif sonucunda "sessiz 0" koruması: sağlayıcı devre dışıysa / `partial`
+  ise sonuca `degraded: true` ve okunur bir uyarı ekle; bilinmeyen sağlayıcı adı
+  da uyarı üretir.
+- [x] `/api/health` çıktısına canlı sağlayıcı durumu (`provider_status`),
+  `degraded` ve `problems` ekle.
 - [ ] Sağlayıcı sağlığı: üst üste N hata veren sağlayıcıyı kısa süre devre dışı
-  bırakan basit circuit breaker (bellek içi, TTL'li).
-- [ ] `/api/health` ve `capabilities` çıktısına sağlayıcı durumunu ekle.
+  bırakan basit circuit breaker (Faz 1'e taşındı — önbellek ile birlikte).
 
 **Dosyalar:** `lead_hunter/doctor.py` (yeni), `lead_hunter/services.py`,
 `server.py`, `pyproject.toml` (`[project.scripts]`), `tests/test_doctor.py` (yeni),
 `README.md`.
 
 **Kabul kriteri:** `duckdb` yokken `doctor` net bir hata verir ve çıkış kodu ≠ 0;
-keşif "0" sonucu "degraded" olarak işaretlenir; testler eklenir.
+keşif "0" sonucu "degraded" olarak işaretlenir; testler eklenir. ✅ (77 test yeşil)
 
 ---
 
@@ -161,7 +162,7 @@ gece koşusu tek komutla çalışır.
 
 | Faz | Konu | Durum |
 |-----|------|-------|
-| 0 | Sağlık kontrolü + sessiz hata önleme | `[ ]` |
+| 0 | Sağlık kontrolü + sessiz hata önleme | `[x]` |
 | 1 | Hız ve engel direnci | `[ ]` |
 | 2 | Otomasyon (gece koşusu + diff) | `[ ]` |
 | 3 | Veri kalitesi ve tekilleştirme | `[ ]` |
