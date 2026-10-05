@@ -7,8 +7,10 @@ import lead_hunter.db as db
 import lead_hunter.services as services
 from lead_hunter.providers.web_search import (
     _duckduckgo_search,
+    _google_search,
     _score_result,
     configured_provider,
+    configured_providers,
     verify_business_web,
 )
 
@@ -37,13 +39,21 @@ DDG_HTML = b"""
 </div>
 """
 
+GOOGLE_JSON = b"""
+{"items": [
+  {"link": "https://example-dental.pk/", "title": "Example Dental", "snippet": "Karachi dentist official website"},
+  {"link": "https://yelp.com/biz/example-dental", "title": "Example Dental - Yelp", "snippet": "Reviews"}
+]}
+"""
+
 
 class WebSearchProviderTests(unittest.TestCase):
+    _KEYS = ("LEADSCOUT_WEB_SEARCH", "BRAVE_SEARCH_API_KEY", "SEARXNG_URL",
+             "GOOGLE_CSE_API_KEY", "GOOGLE_CSE_ID")
+
     def setUp(self):
-        self._saved = {
-            key: __import__("os").environ.pop(key, None)
-            for key in ("LEADSCOUT_WEB_SEARCH", "BRAVE_SEARCH_API_KEY", "SEARXNG_URL")
-        }
+        import os
+        self._saved = {key: os.environ.pop(key, None) for key in self._KEYS}
 
     def tearDown(self):
         import os
@@ -53,17 +63,32 @@ class WebSearchProviderTests(unittest.TestCase):
             else:
                 os.environ[key] = value
 
-    def test_provider_precedence(self):
+    def test_default_chain_is_keyless_then_google(self):
         import os
+        self.assertEqual(configured_providers(), ["duckduckgo"])
         self.assertEqual(configured_provider(), "duckduckgo")
+        os.environ["GOOGLE_CSE_API_KEY"] = "key"
+        os.environ["GOOGLE_CSE_ID"] = "cx"
+        self.assertEqual(configured_providers(), ["duckduckgo", "google"])
+
+    def test_google_needs_both_key_and_cx(self):
+        import os
+        os.environ["GOOGLE_CSE_API_KEY"] = "key"
+        self.assertNotIn("google", configured_providers())
+
+    def test_explicit_chain_and_off(self):
+        import os
+        os.environ["GOOGLE_CSE_API_KEY"] = "key"
+        os.environ["GOOGLE_CSE_ID"] = "cx"
         os.environ["SEARXNG_URL"] = "http://127.0.0.1:8080"
+        os.environ["LEADSCOUT_WEB_SEARCH"] = "searxng, google , duckduckgo"
+        self.assertEqual(configured_providers(), ["searxng", "google", "duckduckgo"])
         self.assertEqual(configured_provider(), "searxng")
-        os.environ["BRAVE_SEARCH_API_KEY"] = "key"
-        self.assertEqual(configured_provider(), "brave")
-        os.environ["LEADSCOUT_WEB_SEARCH"] = "searxng"
-        self.assertEqual(configured_provider(), "searxng")
-        os.environ["LEADSCOUT_WEB_SEARCH"] = "off"
+        os.environ["LEADSCOUT_WEB_SEARCH"] = "brave"
+        self.assertEqual(configured_providers(), [])
         self.assertEqual(configured_provider(), "")
+        os.environ["LEADSCOUT_WEB_SEARCH"] = "off"
+        self.assertEqual(configured_providers(), [])
 
     def test_duckduckgo_results_are_parsed_and_unwrapped(self):
         with patch(
@@ -76,6 +101,19 @@ class WebSearchProviderTests(unittest.TestCase):
         self.assertIn("official website", results[0]["description"])
         self.assertEqual(results[1]["url"], "https://instagram.com/exampledental")
 
+    def test_google_results_are_parsed(self):
+        import os
+        os.environ["GOOGLE_CSE_API_KEY"] = "key"
+        os.environ["GOOGLE_CSE_ID"] = "cx"
+        with patch(
+            "lead_hunter.providers.web_search.urllib.request.urlopen",
+            return_value=_FakeResponse(GOOGLE_JSON),
+        ):
+            results = _google_search("Example Dental Karachi", count=5)
+        self.assertEqual(results[0]["url"], "https://example-dental.pk/")
+        self.assertEqual(results[0]["title"], "Example Dental")
+        self.assertIn("official website", results[0]["description"])
+
     def test_duckduckgo_fallback_scores_as_official_site(self):
         with patch(
             "lead_hunter.providers.web_search.urllib.request.urlopen",
@@ -86,6 +124,54 @@ class WebSearchProviderTests(unittest.TestCase):
         self.assertEqual(check["provider"], "duckduckgo")
         self.assertTrue(check["verified"])
         self.assertEqual(check["website"], "https://example-dental.pk/")
+
+    def test_falls_back_to_google_when_duckduckgo_fails(self):
+        import os
+        os.environ["GOOGLE_CSE_API_KEY"] = "key"
+        os.environ["GOOGLE_CSE_ID"] = "cx"
+        calls = []
+
+        def fake_urlopen(req, timeout=20):
+            calls.append(req.full_url)
+            if "duckduckgo" in req.full_url:
+                raise OSError("rate limited")
+            return _FakeResponse(GOOGLE_JSON)
+
+        with patch("lead_hunter.providers.web_search.urllib.request.urlopen", side_effect=fake_urlopen):
+            check = verify_business_web(name="Example Dental", city="Karachi", country="Pakistan")
+        self.assertEqual(check["provider"], "google")
+        self.assertTrue(check["verified"])
+        self.assertEqual(check["website"], "https://example-dental.pk/")
+        self.assertEqual(check["errors"][0]["provider"], "duckduckgo")
+        self.assertEqual(len(calls), 2)
+
+    def test_duckduckgo_botcheck_page_raises(self):
+        botcheck = b'<form id="img-form" action="//duckduckgo.com/anomaly.js?sv=html"></form>'
+        with patch(
+            "lead_hunter.providers.web_search.urllib.request.urlopen",
+            return_value=_FakeResponse(botcheck),
+        ):
+            with self.assertRaises(RuntimeError):
+                _duckduckgo_search("anything", count=5)
+
+    def test_empty_results_fall_through_to_next_provider(self):
+        import os
+        os.environ["GOOGLE_CSE_API_KEY"] = "key"
+        os.environ["GOOGLE_CSE_ID"] = "cx"
+        empty = b"<html><body>no results here</body></html>"
+        calls = []
+
+        def fake_urlopen(req, timeout=20):
+            calls.append(req.full_url)
+            if "duckduckgo" in req.full_url:
+                return _FakeResponse(empty)
+            return _FakeResponse(GOOGLE_JSON)
+
+        with patch("lead_hunter.providers.web_search.urllib.request.urlopen", side_effect=fake_urlopen):
+            check = verify_business_web(name="Example Dental", city="Karachi", country="Pakistan")
+        self.assertEqual(check["provider"], "google")
+        self.assertTrue(check["verified"])
+        self.assertEqual(len(calls), 2)
 
 
 class V6VerificationTests(unittest.TestCase):
