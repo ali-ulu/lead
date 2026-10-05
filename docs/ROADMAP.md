@@ -57,7 +57,7 @@ rate-limit yemeyi azaltmak.
 **Dosyalar:** `lead_hunter/providers/osm.py`, `lead_hunter/providers/nominatim.py`,
 `lead_hunter/providers/overture.py`, `lead_hunter/providers/web_search.py`,
 `lead_hunter/cache.py` (yeni), `lead_hunter/ratelimit.py` (yeni),
-`tests/test_cache.py`, `tests/test_ratelimit.py`.
+`tests/test_cache.py`.
 
 **Kabul kriteri:** Aynı şehir ikinci taramada belirgin hızlanır; tile taraması
 paralel; Nominatim hızı politika ile sınırlı; testler yeşil.
@@ -68,12 +68,13 @@ paralel; Nominatim hızı politika ile sınırlı; testler yeşil.
 
 **Amaç:** Ürünün asıl değeri ilk taramada değil, tekrarlı taramadaki farkta.
 
-- [ ] Zamanlanmış gece koşusu: seçili şehir/kategorileri tarar, XLSX + özet
-  maili/dosyası bırakır (`scripts/nightly.py`, cron örneği dokümanda).
-- [ ] Değişim tespiti (diff): koşular arası "yeni işletme", "web sitesi açan",
+- [x] Zamanlanmış gece koşusu: seçili şehir/kategorileri tarar, XLSX + JSON/txt
+  özet bırakır (`scripts/nightly.py`, cron örneği `docs/AUTOMATION.md`).
+- [x] Değişim tespiti (diff): koşular arası "yeni işletme", "web sitesi açan",
   "sitesi ölen", "kapanan" farklarını raporla; `search_runs` üstüne kur.
-- [ ] Fırsat alarmı: eşik (ör. fırsat skoru ≥ 70 ve sitesi yok + telefon var)
-  geçen yeni lead'leri işaretle.
+  `search_run_leads` artık `website_status`/`lead_score` anlık görüntüsü tutar.
+- [x] Fırsat alarmı: `lead_score >= 70` ve sitesi yok ve telefon var olan yeni
+  lead'ler `alerts` altında işaretlenir.
 - [ ] `partial` kalan kategorileri düşük hızda otomatik tamamlayan kuyruk.
 
 **Dosyalar:** `scripts/nightly.py` (yeni), `lead_hunter/diff.py` (yeni),
@@ -164,7 +165,7 @@ gece koşusu tek komutla çalışır.
 |-----|------|-------|
 | 0 | Sağlık kontrolü + sessiz hata önleme | `[x]` |
 | 1 | Hız ve engel direnci | `[x]` |
-| 2 | Otomasyon (gece koşusu + diff) | `[ ]` |
+| 2 | Otomasyon (gece koşusu + diff) | `[x]` |
 | 3 | Veri kalitesi ve tekilleştirme | `[ ]` |
 | 4 | Güvenlik ve uyum | `[ ]` |
 | 5 | Rapor ve ürün özellikleri | `[ ]` |

@@ -71,6 +71,12 @@ def initialize() -> None:
         }.items():
             if name not in search_cols:
                 conn.execute(f"ALTER TABLE search_runs ADD COLUMN {name} {ddl}")
+        # Snapshot the lead's state at scan time so run-to-run diffs can see
+        # website/score changes that later updates would otherwise hide.
+        run_lead_cols = {row["name"] for row in conn.execute("PRAGMA table_info(search_run_leads)").fetchall()}
+        for name, ddl in {"website_status": "TEXT", "lead_score": "INTEGER"}.items():
+            if name not in run_lead_cols:
+                conn.execute(f"ALTER TABLE search_run_leads ADD COLUMN {name} {ddl}")
         conn.commit()
 
 def _loads(value: Any, fallback):
@@ -223,8 +229,18 @@ def record_search_run(*, country: str, city: str, category: str, radius_km: int,
             (search_id,country,city,category,int(radius_km),len(lead_ids),
              json.dumps(provider_summary or {},ensure_ascii=False),int(partial),json.dumps(warnings or [],ensure_ascii=False)),
         )
-        conn.executemany("INSERT OR IGNORE INTO search_run_leads(search_id,lead_id) VALUES (?,?)",
-                         [(search_id,int(i)) for i in lead_ids])
+        snapshots: dict[int, tuple[str | None, int | None]] = {}
+        if lead_ids:
+            placeholders=",".join("?" for _ in lead_ids)
+            for row in conn.execute(
+                f"SELECT id, website_status, lead_score FROM leads WHERE id IN ({placeholders})",
+                [int(i) for i in lead_ids],
+            ).fetchall():
+                snapshots[int(row["id"])] = (row["website_status"], row["lead_score"])
+        conn.executemany(
+            "INSERT OR IGNORE INTO search_run_leads(search_id,lead_id,website_status,lead_score) VALUES (?,?,?,?)",
+            [(search_id,int(i),*snapshots.get(int(i),(None,None))) for i in lead_ids],
+        )
         conn.commit()
     return search_id
 
@@ -300,6 +316,58 @@ def get_search_run(search_id: str) -> dict[str, Any] | None:
     if not row: return None
     item=dict(row); item["provider_summary"]=_loads(item.get("provider_summary"),{}); item["warnings"]=_loads(item.get("warnings"),[])
     item["partial"]=bool(item.get("partial")); return item
+
+def list_search_runs(*, city: str="", country: str="", category: str="", limit: int=50) -> list[dict[str, Any]]:
+    clauses=[]; args: list[Any]=[]
+    for field, value in (("city",city),("country",country),("category",category)):
+        value=(value or "").strip()
+        if value: clauses.append(f"LOWER({field}) LIKE LOWER(?)"); args.append(f"%{value}%")
+    where=f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    args.append(max(1,int(limit)))
+    with connect() as conn:
+        rows=conn.execute(f"SELECT * FROM search_runs {where} ORDER BY created_at DESC, id DESC LIMIT ?",args).fetchall()
+    out=[]
+    for row in rows:
+        item=dict(row); item["provider_summary"]=_loads(item.get("provider_summary"),{}); item["warnings"]=_loads(item.get("warnings"),[])
+        item["partial"]=bool(item.get("partial")); out.append(item)
+    return out
+
+def latest_search_run(*, city: str, country: str, category: str, exclude_id: str = "") -> dict[str, Any] | None:
+    """Most recent run for the exact stored market, optionally excluding one id."""
+    with connect() as conn:
+        row=conn.execute(
+            "SELECT * FROM search_runs "
+            "WHERE LOWER(city)=LOWER(?) AND LOWER(country)=LOWER(?) AND LOWER(category)=LOWER(?) AND id != ? "
+            "ORDER BY created_at DESC, id DESC LIMIT 1",
+            (city,country,category,exclude_id),
+        ).fetchone()
+    if not row: return None
+    item=dict(row); item["provider_summary"]=_loads(item.get("provider_summary"),{}); item["warnings"]=_loads(item.get("warnings"),[])
+    item["partial"]=bool(item.get("partial")); return item
+
+def lead_ids_for_search(search_id: str) -> list[int]:
+    with connect() as conn:
+        rows=conn.execute("SELECT lead_id FROM search_run_leads WHERE search_id=?",(search_id,)).fetchall()
+    return [int(r["lead_id"]) for r in rows]
+
+def snapshots_for_search(search_id: str) -> dict[int, dict[str, Any]]:
+    """Lead state as recorded when the search ran (website status and score)."""
+    with connect() as conn:
+        rows=conn.execute(
+            "SELECT lead_id, website_status, lead_score FROM search_run_leads WHERE search_id=?",
+            (search_id,),
+        ).fetchall()
+    return {
+        int(r["lead_id"]): {"website_status": r["website_status"], "lead_score": r["lead_score"]}
+        for r in rows
+    }
+
+def leads_by_ids(ids: list[int]) -> list[dict[str, Any]]:
+    if not ids: return []
+    placeholders=",".join("?" for _ in ids)
+    with connect() as conn:
+        rows=conn.execute(f"SELECT * FROM leads WHERE id IN ({placeholders})",[int(i) for i in ids]).fetchall()
+    return [_decode(r) for r in rows if r]
 
 def clear_all() -> None:
     with connect() as conn:
