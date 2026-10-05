@@ -226,7 +226,7 @@ class V6VerificationTests(unittest.TestCase):
         }
         result=services.verify_lead(self.lead_id)
         lead=result["lead"]
-        self.assertEqual(lead["website"],"https://exampledental.pk/")
+        self.assertEqual(lead["website"],"https://exampledental.pk")
         self.assertEqual(lead["verification_status"],"web_verified")
         self.assertEqual(lead["website_status"],"unknown")
 
@@ -248,7 +248,7 @@ class V6VerificationTests(unittest.TestCase):
         self.assertEqual(lead["rating"],4.7)
         self.assertEqual(lead["review_count"],328)
         self.assertEqual(lead["source_refs"]["google_places"],"places/example")
-        self.assertEqual(lead["website"],"https://exampledental.pk/")
+        self.assertEqual(lead["website"],"https://exampledental.pk")
         self.assertGreater(lead["commercial_score"],0)
 
 

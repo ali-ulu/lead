@@ -9,6 +9,7 @@ from .enrichment import enrich_website
 from .intelligence import calculate_intelligence
 from .visibility import calculate_visibility, missing_website_visibility
 from .merge import merge_leads
+from . import normalize
 from .outreach import build_message
 from .providers.nominatim import geocode_area
 from .providers.osm import CATEGORY_FILTERS, _radius_bbox, search_around_detailed
@@ -140,9 +141,10 @@ def enrich_lead(lead_id: int) -> dict[str,Any]:
         return {"lead":lead,"enrichment":{"complete":False,"reason":"no_website"}}
     result=enrich_website(lead["website"])
     socials={**(lead.get("social_links") or {}),**(result.get("social_links") or {})}
+    region=str(lead.get("country") or "TR")
     updates={
         "email":lead.get("email") or next(iter(result.get("emails") or []),None),
-        "phone":lead.get("phone") or next(iter(result.get("phones") or []),None),
+        "phone":normalize.normalize_phone(lead.get("phone") or next(iter(result.get("phones") or []),None),region),
         "social_links":socials,
         "social_url":lead.get("social_url") or next(iter(socials.values()),None),
         "verification_status":"verified" if result.get("complete") else lead.get("verification_status"),
@@ -199,7 +201,7 @@ def verify_lead(lead_id: int) -> dict[str,Any]:
                 country=updated.get("country") or "",
             )
             if web_check.get("verified") and web_check.get("website"):
-                website=str(web_check["website"])
+                website=normalize.normalize_website(str(web_check["website"])) or str(web_check["website"])
                 notes=list(updated.get("verification_notes") or [])
                 notes.append(
                     f"Official-site candidate verified via {web_check.get('provider')}: {website}"
@@ -276,11 +278,11 @@ def enrich_reputation(lead_id: int) -> dict[str,Any]:
         "verification_notes":list(dict.fromkeys(notes)),
     }
     if not lead.get("website") and result.get("website"):
-        updates["website"]=result["website"]
+        updates["website"]=normalize.normalize_website(result["website"]) or result["website"]
         updates["website_status"]="unknown"
         updates["verification_status"]="reputation_verified"
     if not lead.get("phone") and result.get("phone"):
-        updates["phone"]=result["phone"]
+        updates["phone"]=normalize.normalize_phone(result["phone"], str(lead.get("country") or "TR"))
 
     updated=update_lead(int(lead_id),updates) or lead
     updated=_update_intelligence(int(lead_id),updated)

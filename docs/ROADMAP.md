@@ -87,19 +87,25 @@ gece koşusu tek komutla çalışır.
 
 ## Faz 3 — Veri kalitesi ve tekilleştirme
 
-- [ ] Telefon normalizasyonu (E.164): `+90`, `0…`, boşluklu/parantezli TR
-  formatları tek forma gelsin.
-- [ ] Domain normalizasyonu: `www.`, http/https, izleme parametreleri,
-  sondaki `/` temizlensin; tekilleştirme domain bazlı olsun.
-- [ ] Bulanık isim eşleştirme: OSM ve Overture kayıtlarını trigram/Levenshtein
-  + coğrafi yakınlık ile birleştir (yanlış ayrı kayıtları azalt).
-- [ ] Sektör taksonomisi: `barber`/`hairdresser` alias birleştirmesi; kategoriler
-  Türkçe adlarla da eşleşsin.
+- [x] Telefon normalizasyonu (E.164): `+90`, `0…`, boşluklu/parantezli TR
+  formatları `lead_hunter/normalize.py` içinde tek forma iner; `country`
+  yoksa TR varsayılır.
+- [x] Domain normalizasyonu: `www.`, http/https, izleme parametreleri,
+  sondaki `/` temizlenir; tekilleştirme domain bazlı (`normalize_domain`).
+- [x] Bulanık isim eşleştirme: OSM ve Overture kayıtlarını trigram/Levenshtein
+  + ≤250 m coğrafi yakınlık; jenerik kelimeler (`salon`, `restoran`, `ltd` …)
+  eşleştirmede yok sayılır.
+- [x] Sektör taksonomisi: `barber`/`hairdresser` alias birleştirmesi; kategoriler
+  Türkçe adlarla da eşleşir (`category_key`).
 
 **Dosyalar:** `lead_hunter/merge.py`, `lead_hunter/normalize.py` (yeni),
-`lead_hunter/providers/osm.py`, `tests/test_normalize.py`, `tests/test_merge.py`.
+`lead_hunter/services.py`, `tests/test_normalize.py` (yeni), `tests/test_merge.py` (yeni).
 
 **Kabul kriteri:** Aynı işletme farklı formatlarda tek kayda iner; birim testleri.
+
+**Not (geri doldurma):** Normalizasyon `merge_leads` çıktısına uygulandığı için
+`source_id` kanonik hash'i değişir; Faz 3 öncesinde oluşmuş ayrık satırlar
+otomatik birleşmez, mevcut veritabanı için yeniden tarama gerekir.
 
 ---
 
@@ -168,7 +174,7 @@ gece koşusu tek komutla çalışır.
 | 0 | Sağlık kontrolü + sessiz hata önleme | `[x]` |
 | 1 | Hız ve engel direnci | `[x]` |
 | 2 | Otomasyon (gece koşusu + diff) | `[x]` |
-| 3 | Veri kalitesi ve tekilleştirme | `[ ]` |
+| 3 | Veri kalitesi ve tekilleştirme | `[x]` |
 | 4 | Güvenlik ve uyum | `[x]` |
 | 5 | Rapor ve ürün özellikleri | `[ ]` |
 | 6 | Geliştirici deneyimi ve test altyapısı | `[ ]` |
