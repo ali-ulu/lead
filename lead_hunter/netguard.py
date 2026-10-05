@@ -97,10 +97,11 @@ class _GuardHTTPSConnection(http.client.HTTPSConnection):
         self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host)
 
 
-def build_public_opener() -> urllib.request.OpenerDirector:
+def build_public_opener(*, check_robots: bool = True) -> urllib.request.OpenerDirector:
     """An opener that re-validates every redirect hop and the connected peer."""
     return urllib.request.build_opener(
-        _PublicRedirectHandler(), _GuardHTTPHandler(), _GuardHTTPSHandler(),
+        _PublicRedirectHandler(check_robots=check_robots),
+        _GuardHTTPHandler(), _GuardHTTPSHandler(),
     )
 
 
@@ -115,9 +116,20 @@ class _GuardHTTPSHandler(urllib.request.HTTPSHandler):
 
 
 class _PublicRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def __init__(self, *, check_robots: bool = True) -> None:
+        super().__init__()
+        self._check_robots = check_robots
+
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         target = urllib.parse.urljoin(req.full_url, newurl)
         assert_public_url(target)
+        # A redirect is a fresh fetch of a new URL, so it must pass the same
+        # robots check as the original request. robots.txt itself opts out to
+        # avoid recursing back into _fetch_robots.
+        if (self._check_robots
+                and os.environ.get("LEADSCOUT_RESPECT_ROBOTS", "1") == "1"
+                and not robots_allows(target)):
+            raise ValueError("Blocked by robots.txt")
         return super().redirect_request(req, fp, code, msg, headers, target)
 
 
@@ -184,7 +196,7 @@ def _fetch_robots(origin: str, timeout: float) -> list[str]:
     try:
         assert_public_url(robots_url)
         req = urllib.request.Request(robots_url, headers={"User-Agent": USER_AGENT})
-        with build_public_opener().open(req, timeout=timeout) as resp:
+        with build_public_opener(check_robots=False).open(req, timeout=timeout) as resp:
             if resp.status != 200:
                 return []
             body = resp.read(512_000).decode("utf-8", errors="replace")

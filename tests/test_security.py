@@ -2,6 +2,7 @@
 import socket
 import time
 import unittest
+import urllib.request
 from unittest import mock
 
 from lead_hunter import netguard
@@ -59,6 +60,23 @@ class SsrfGuardTests(unittest.TestCase):
         with mock.patch.object(conn, "_create_connection", return_value=fake):
             conn.connect()
         self.assertIs(conn.sock, fake)
+
+    def test_redirect_to_robots_disallowed_target_is_blocked(self):
+        handler = netguard._PublicRedirectHandler(check_robots=True)
+        req = urllib.request.Request("https://example.com/")
+        with mock.patch.object(netguard.socket, "getaddrinfo", return_value=_addr("93.184.216.34")), \
+                mock.patch.object(netguard, "robots_allows", return_value=False):
+            with self.assertRaises(ValueError):
+                handler.redirect_request(req, None, 302, "Found", {}, "https://example.com/private")
+
+    def test_redirect_robots_check_can_be_disabled(self):
+        handler = netguard._PublicRedirectHandler(check_robots=False)
+        req = urllib.request.Request("https://example.com/")
+        with mock.patch.object(netguard.socket, "getaddrinfo", return_value=_addr("93.184.216.34")), \
+                mock.patch.object(netguard, "robots_allows", return_value=False) as robots:
+            redirected = handler.redirect_request(req, None, 302, "Found", {}, "https://example.com/private")
+        self.assertIsInstance(redirected, urllib.request.Request)
+        robots.assert_not_called()
 
 
 class RobotsTests(unittest.TestCase):
