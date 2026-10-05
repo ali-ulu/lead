@@ -8,7 +8,7 @@
 - Results are merged and deduplicated by domain, phone, and name + proximity.
 - **No application-level 250-result cap.**
 - Search results expose provider counts, partial-result state and warnings.
-- **Website verification:** "No site found" is cross-checked against Overture and, when configured, Brave Search API or your own SearXNG instance before it becomes a strong sales signal.
+- **Website verification:** "No site found" is cross-checked against Overture and, when configured, a web search before it becomes a strong sales signal. A keyless DuckDuckGo lookup works out of the box; Brave Search API and self-hosted SearXNG are optional upgrades.
 - **Contact enrichment:** public business pages are scanned for email, phone, booking links and social accounts.
 - Instagram, Facebook, LinkedIn, X/Twitter, YouTube, TikTok, Telegram and WhatsApp discovery.
 - **Deep website audit:** Lighthouse performance/accessibility/best-practices plus structured content analysis.
@@ -70,15 +70,25 @@ This keeps “where is the deal?” separate from “what happened to the messag
 
 Core discovery still works without paid API keys.
 
-For general-web verification, configure either:
+For general-web verification, LeadScout uses a keyless DuckDuckGo lookup by default, so website verification works out of the box. You can switch providers or upgrade:
 
 ```bash
-BRAVE_SEARCH_API_KEY=...
-# or
-SEARXNG_URL=http://127.0.0.1:8080
+# Default when nothing else is configured (no key, no account):
+# LEADSCOUT_WEB_SEARCH=duckduckgo
+
+# Brave Search API (best quality/rate limits): https://brave.com/search/api/
+# LEADSCOUT_WEB_SEARCH=brave
+# BRAVE_SEARCH_API_KEY=...
+
+# Self-hosted SearXNG with JSON output enabled (no vendor lock-in):
+# LEADSCOUT_WEB_SEARCH=searxng
+# SEARXNG_URL=http://127.0.0.1:8080
+
+# Disable web verification entirely:
+# LEADSCOUT_WEB_SEARCH=off
 ```
 
-Brave is used only when its key is present. A self-hosted SearXNG instance is a no-vendor-lock-in alternative; JSON output must be enabled.
+Precedence: an explicit `LEADSCOUT_WEB_SEARCH` wins; otherwise `BRAVE_SEARCH_API_KEY`, then `SEARXNG_URL`, then the built-in DuckDuckGo fallback. Brave and SearXNG are only contacted when configured. The DuckDuckGo lookup uses the public HTML endpoint and needs no account.
 
 For reputation enrichment:
 

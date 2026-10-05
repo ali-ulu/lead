@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 import os
 import re
@@ -95,12 +96,64 @@ def _searxng_search(query: str, *, count: int=10) -> list[dict[str,Any]]:
         data=json.loads(resp.read().decode("utf-8"))
     return list(data.get("results") or [])[:max(1,min(20,int(count)))]
 
+
+def _clean_html(value: str) -> str:
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", "", value or ""))).strip()
+
+
+def _duckduckgo_search(query: str, *, count: int=10) -> list[dict[str,Any]]:
+    # Keyless HTML endpoint. No API key or account is required; results are
+    # parsed from the markup because the Instant Answer API does not return links.
+    data=urllib.parse.urlencode({"q":query}).encode("utf-8")
+    req=urllib.request.Request(
+        "https://html.duckduckgo.com/html/",
+        data=data,
+        headers={
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+            "Accept": "text/html",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+    with urllib.request.urlopen(req,timeout=20) as resp:
+        page=resp.read().decode("utf-8","replace")
+
+    results: list[dict[str,Any]] = []
+    pattern=re.compile(
+        r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>'
+        r'(?:.*?class="result__snippet"[^>]*>(.*?)</a>)?',
+        re.S,
+    )
+    for href, title, snippet in pattern.findall(page):
+        url=html.unescape(href)
+        if url.startswith("//duckduckgo.com/l/"):
+            target=urllib.parse.parse_qs(urllib.parse.urlparse("https:"+url).query).get("uddg")
+            url=target[0] if target else url
+        elif url.startswith("/l/"):
+            target=urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get("uddg")
+            url=target[0] if target else url
+        if not url.startswith(("http://","https://")):
+            continue
+        results.append({
+            "url":url,
+            "title":_clean_html(title),
+            "description":_clean_html(snippet or ""),
+        })
+        if len(results)>=max(1,min(20,int(count))):
+            break
+    return results
+
+
 def configured_provider() -> str:
+    explicit=os.environ.get("LEADSCOUT_WEB_SEARCH","").strip().lower()
+    if explicit in {"off","none","disabled"}:
+        return ""
+    if explicit in {"brave","searxng","duckduckgo"}:
+        return explicit
     if os.environ.get("BRAVE_SEARCH_API_KEY","").strip():
         return "brave"
     if os.environ.get("SEARXNG_URL","").strip():
         return "searxng"
-    return ""
+    return "duckduckgo"
 
 def verify_business_web(
     *,
@@ -123,8 +176,10 @@ def verify_business_web(
     query=" ".join(x for x in [f'"{name}"',city,country,"official website"] if x).strip()
     if provider=="brave":
         raw=_brave_search(query,count=count,country_code=country_code)
-    else:
+    elif provider=="searxng":
         raw=_searxng_search(query,count=count)
+    else:
+        raw=_duckduckgo_search(query,count=count)
 
     candidates=[]
     for item in raw:
