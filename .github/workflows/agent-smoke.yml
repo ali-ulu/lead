@@ -27,7 +27,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: leadscout-agent-smoke
+  group: leadscout-agent-smoke-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
