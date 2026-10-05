@@ -69,6 +69,10 @@ A missing website, email or social field means **not found in the reviewed sourc
 
 Provider responses (Nominatim, Overpass, Overture, web search) are cached on disk when `LEADSCOUT_CACHE_TTL` is set, so re-scans are fast and shared public endpoints are not hammered. Overpass fallback tiles are fetched in parallel, Nominatim requests are spaced to its one-per-second policy, transient errors are retried, and a provider that keeps failing is skipped for a cooldown instead of stalling a long scan. See `.env.example` for the knobs.
 
+## Nightly scans and change reports
+
+`scripts/nightly.py` scans selected city/category pairs, exports one XLSX, and compares each run with the previous one so new businesses, websites gained or lost, and fresh high-opportunity leads (score ≥ 70, no website, phone present) are reported. See [docs/AUTOMATION.md](docs/AUTOMATION.md) for the report format and a cron example.
+
 ## CRM
 
 Sales pipeline:
