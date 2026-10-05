@@ -19,7 +19,11 @@ concurrency:
 jobs:
   live-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Uncapped live discovery is slow and provider-bound: a dense Karachi scan
+    # alone can take ~12 minutes, and the three markets together exceed the old
+    # 15-minute cap, so the job was killed before finishing and could never go
+    # green. Keep the uncapped path but give it enough headroom.
+    timeout-minutes: 35
     env:
       PYTHONPATH: .
     steps:
