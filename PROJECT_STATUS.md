@@ -1,6 +1,6 @@
 # LeadScout — Project Status
 
-**Version:** 5.1.0  
+**Version:** 7.0.0
 **State:** Local sales/agent release
 
 Implemented:
