@@ -5,6 +5,9 @@ import os
 import urllib.request
 from typing import Any
 
+from .. import cache
+from .. import ratelimit
+
 STAC_URL = "https://stac.overturemaps.org/catalog.json"
 FALLBACK_RELEASE = "2026-08-19.0"
 
@@ -41,17 +44,28 @@ def latest_release() -> str:
     configured = os.environ.get("OVERTURE_RELEASE", "").strip()
     if configured:
         return configured
+    cached = cache.get("overture_release", ["stac"])
+    if cached:
+        return cached
     try:
         req = urllib.request.Request(STAC_URL, headers={"User-Agent": "LeadScout/5.0"})
-        with urllib.request.urlopen(req, timeout=12) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+
+        def _do() -> Any:
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+
+        data = ratelimit.call("overture_stac", _do)
         latest = data.get("latest")
+        release = ""
         if isinstance(latest, str) and latest:
-            return latest.strip("/")
-        if isinstance(latest, dict):
+            release = latest.strip("/")
+        elif isinstance(latest, dict):
             href = latest.get("href") or latest.get("id")
             if href:
-                return str(href).rstrip("/").rsplit("/", 1)[-1]
+                release = str(href).rstrip("/").rsplit("/", 1)[-1]
+        if release:
+            cache.put("overture_release", ["stac"], release)
+            return release
     except Exception:
         pass
     return FALLBACK_RELEASE
@@ -96,6 +110,10 @@ def search_bbox(
         "OVERTURE_PLACES_GLOB",
         f"s3://overturemaps-us-west-2/release/{release}/theme=places/type=place/*",
     )
+    cache_key = ["overture", west, south, east, north, category, limit, source]
+    cached = cache.get("overture", cache_key)
+    if cached is not None:
+        return cached
     where_category = _category_sql(category)
     limit_sql = f" LIMIT {int(limit)}" if limit and int(limit) > 0 else ""
 
@@ -178,4 +196,5 @@ def search_bbox(
             "data_confidence": "high" if (row.get("confidence") or 0) >= 0.75 else "medium",
             "overture_confidence": float(row.get("confidence") or 0),
         })
+    cache.put("overture", cache_key, out)
     return out

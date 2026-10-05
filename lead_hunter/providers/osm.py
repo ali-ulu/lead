@@ -3,7 +3,11 @@ import json
 import math
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+
+from .. import cache
+from .. import ratelimit
 
 OVERPASS_URLS = (
     "https://overpass-api.de/api/interpreter",
@@ -110,8 +114,17 @@ def _fetch_one(endpoint: str, query: str, timeout: int) -> dict[str, Any]:
         data=payload,
         headers={"User-Agent": USER_AGENT, "Content-Type": "application/x-www-form-urlencoded"},
     )
-    with urllib.request.urlopen(req, timeout=timeout + 5) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+
+    def _do() -> dict[str, Any]:
+        with urllib.request.urlopen(req, timeout=timeout + 5) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    cached = cache.get("overpass", [endpoint, query])
+    if cached is not None:
+        return cached
+    data = ratelimit.call(f"overpass:{endpoint}", _do)
+    cache.put("overpass", [endpoint, query], data)
+    return data
 
 
 def _fetch(query: str, timeout: int) -> dict[str, Any]:
@@ -237,8 +250,14 @@ def _search_tiled_around_detailed(
     merged: dict[str, dict[str, Any]] = {}
     failed_tiles = 0
 
-    for tile_s, tile_w, tile_n, tile_e in _tile_boxes(south, west, north, east, grid=2):
-        rows = _fetch_tile_rows(tile_s, tile_w, tile_n, tile_e, category, city, country, timeout)
+    boxes = _tile_boxes(south, west, north, east, grid=2)
+    with ThreadPoolExecutor(max_workers=min(4, len(boxes))) as pool:
+        tile_results = list(pool.map(
+            lambda box: _fetch_tile_rows(box[0], box[1], box[2], box[3], category, city, country, timeout),
+            boxes,
+        ))
+
+    for rows in tile_results:
         if not rows:
             failed_tiles += 1
         for row in rows:
@@ -248,8 +267,6 @@ def _search_tiled_around_detailed(
                 if _distance_km(lat, lon, float(row_lat), float(row_lon)) > radius_km:
                     continue
             merged[row["source_id"]] = row
-            if limit is not None and len(merged) >= limit:
-                return {"rows": list(merged.values())[:limit], "partial": failed_tiles > 0, "failed_tiles": failed_tiles}
 
     rows = list(merged.values()) if limit is None else list(merged.values())[:limit]
     return {"rows": rows, "partial": failed_tiles > 0, "failed_tiles": failed_tiles}
