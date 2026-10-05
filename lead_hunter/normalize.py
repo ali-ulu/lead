@@ -78,7 +78,7 @@ def normalize_domain(value: str | None) -> str:
 
 
 def normalize_website(value: str | None) -> str | None:
-    """Canonical URL: https, no ``www.``, no tracking params, no trailing slash."""
+    """Canonical URL: keep the scheme, drop ``www.``, tracking params, trailing slash."""
     if value is None:
         return None
     text = str(value).strip()
@@ -109,7 +109,10 @@ def normalize_website(value: str | None) -> str | None:
         if k.lower() not in _TRACKING_PARAMS
     ])
     netloc = f"{host}:{parts.port}" if parts.port and parts.port not in (80, 443) else host
-    url = f"https://{netloc}{path}"
+    # Keep the original scheme: some businesses only serve HTTP, and rewriting
+    # to https makes enrichment/audit fail on a site that actually works.
+    # Matching ignores the scheme (normalize_domain), so this is safe.
+    url = f"{parts.scheme}://{netloc}{path}"
     if query:
         url += f"?{query}"
     return url

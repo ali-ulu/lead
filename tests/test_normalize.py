@@ -37,7 +37,7 @@ class WebsiteNormalizationTests(unittest.TestCase):
     def test_strips_scheme_www_trailing_slash_and_tracking(self):
         self.assertEqual(
             normalize.normalize_website("http://www.Example.com/"),
-            "https://example.com",
+            "http://example.com",
         )
         self.assertEqual(
             normalize.normalize_website("https://Example.com/path/?utm_source=x&utm_medium=y#frag"),

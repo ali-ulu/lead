@@ -37,7 +37,7 @@ class MergeLeadsTests(unittest.TestCase):
             "website": "http://www.bella.example/?utm_source=x", "social_links": {},
             "website_status": "missing",
         }])
-        self.assertEqual(rows[0]["website"], "https://bella.example")
+        self.assertEqual(rows[0]["website"], "http://bella.example")
         # A website present after normalization must not stay "missing".
         self.assertEqual(rows[0]["website_status"], "unknown")
 
