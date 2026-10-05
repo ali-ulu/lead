@@ -8,6 +8,9 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
+from .. import cache
+from .. import ratelimit
+
 USER_AGENT = "LeadScout/6.0 web-verifier"
 
 DIRECTORY_HOSTS = {
@@ -205,13 +208,24 @@ def configured_provider() -> str:
 
 
 def _run_provider(provider: str, query: str, *, count: int, country_code: str) -> list[dict[str,Any]]:
-    if provider=="brave":
-        return _brave_search(query,count=count,country_code=country_code)
-    if provider=="searxng":
-        return _searxng_search(query,count=count)
-    if provider=="google":
-        return _google_search(query,count=count)
-    return _duckduckgo_search(query,count=count)
+    cached = cache.get("websearch", [provider, query, count, country_code])
+    if cached is not None:
+        return cached
+
+    def _do() -> list[dict[str,Any]]:
+        if provider=="brave":
+            return _brave_search(query,count=count,country_code=country_code)
+        if provider=="searxng":
+            return _searxng_search(query,count=count)
+        if provider=="google":
+            return _google_search(query,count=count)
+        return _duckduckgo_search(query,count=count)
+
+    # No in-provider retries: the chain itself is the fallback, and repeating a
+    # rate-limited request only makes the block worse.
+    results = ratelimit.call(f"websearch:{provider}", _do, min_interval=0.0, retries=0)
+    cache.put("websearch", [provider, query, count, country_code], results)
+    return results
 
 
 def verify_business_web(

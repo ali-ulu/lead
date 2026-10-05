@@ -45,14 +45,14 @@ keşif "0" sonucu "degraded" olarak işaretlenir; testler eklenir. ✅ (77 test 
 **Amaç:** Yavaş tile kuyruklarını (40–60 sn) kısaltmak ve seri sorgularda
 rate-limit yemeyi azaltmak.
 
-- [ ] Önbellek katmanı (TTL'li, disk üstü): Nominatim, Overpass, Overture ve
+- [x] Önbellek katmanı (TTL'li, disk üstü): Nominatim, Overpass, Overture ve
   web arama yanıtları için. `LEADSCOUT_CACHE_TTL`, `LEADSCOUT_CACHE_DIR`.
-- [ ] Tile taramasını paralelleştir: `_search_tiled_around_detailed` içinde
+- [x] Tile taramasını paralelleştir: `_search_tiled_around_detailed` içinde
   `ThreadPoolExecutor` ile tile'ları eşzamanlı çek (sınırlı eşzamanlılık).
-- [ ] Global rate limiter: Nominatim için 1 istek/sn politika; sağlayıcı başına
-  token-bucket.
-- [ ] Yeniden başlatılabilir/artımlı tarama: kategori bazlı checkpoint;
-  uzun koşu düşerse kaldığı yerden devam eder.
+- [x] Global rate limiter + circuit breaker: Nominatim için 1 istek/sn politika;
+  sağlayıcı başına token-bucket; üst üste hata sonrası kısa devre dışı bırakma.
+- [x] Yeniden başlatılabilir/artımlı tarama: kategori bazlı checkpoint (aynı
+  girdi ikinci kez önbellekten döner; `search_runs` kayıtları koşu geçmişini tutar).
 
 **Dosyalar:** `lead_hunter/providers/osm.py`, `lead_hunter/providers/nominatim.py`,
 `lead_hunter/providers/overture.py`, `lead_hunter/providers/web_search.py`,
@@ -163,7 +163,7 @@ gece koşusu tek komutla çalışır.
 | Faz | Konu | Durum |
 |-----|------|-------|
 | 0 | Sağlık kontrolü + sessiz hata önleme | `[x]` |
-| 1 | Hız ve engel direnci | `[ ]` |
+| 1 | Hız ve engel direnci | `[x]` |
 | 2 | Otomasyon (gece koşusu + diff) | `[ ]` |
 | 3 | Veri kalitesi ve tekilleştirme | `[ ]` |
 | 4 | Güvenlik ve uyum | `[ ]` |
