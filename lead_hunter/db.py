@@ -166,13 +166,13 @@ def upsert_leads(rows: list[dict[str, Any]]) -> list[int]:
                     continue
                 if column == "website_status":
                     # Gerilim (regression) olmasin. Kesif turu yalnizca "unknown"
-                    # veya "missing" getirir; daha guclu bir karar (weak) asla
+                    # veya "missing" getirir; daha guclu bir karar (dead, weak) asla
                     # geri alinmaz, ve kesfin "missing" dedigi bir leadin karari
                     # da kendi turunde degismez.
                     assignments.append(
                         "website_status=CASE "
                         "WHEN leads.website_status IS NULL THEN excluded.website_status "
-                        "WHEN leads.website_status IN ('weak','missing') "
+                        "WHEN leads.website_status IN ('dead','weak','missing') "
                         "THEN leads.website_status "
                         "WHEN excluded.website_status IS NULL OR excluded.website_status='unknown' "
                         "THEN leads.website_status "

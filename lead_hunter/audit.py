@@ -278,7 +278,23 @@ def _lighthouse(url: str, timeout: int = 90) -> dict[str, Any] | None:
 
 def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
     url = normalize_url(url)
-    _assert_public_host(url)
+    # A hostname that does not resolve is a finding, not an error: the business
+    # advertises a domain that no longer exists. Resolving up front keeps that
+    # case out of the request path and reports it as website_status "dead".
+    # Overture hands out retired domains often enough that raising here would
+    # abort an entire audit run on the first stale record.
+    probe = normalize_url(url)
+    try:
+        _assert_public_host(probe)
+    except ValueError as exc:
+        if "could not be resolved" in str(exc):
+            return {
+                "reachable": False,
+                "website_status": "dead",
+                "error": str(exc),
+                "social_links": {},
+            }
+        raise
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml"})
     opener = urllib.request.build_opener(
         urllib.request.HTTPSHandler(context=ssl.create_default_context()),
