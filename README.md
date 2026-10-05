@@ -73,6 +73,10 @@ Provider responses (Nominatim, Overpass, Overture, web search) are cached on dis
 
 `scripts/nightly.py` scans selected city/category pairs, exports one XLSX, and compares each run with the previous one so new businesses, websites gained or lost, and fresh high-opportunity leads (score ≥ 70, no website, phone present) are reported. See [docs/AUTOMATION.md](docs/AUTOMATION.md) for the report format and a cron example.
 
+## Data quality and deduplication
+
+The same business often arrives in several shapes across providers. Before a lead is stored it is normalized: phone numbers become E.164 (`+90 555…`, `0555…` and `555…` collapse to `+90555…`), websites are lowercased with the scheme, `www.`, tracking parameters and trailing slash removed, and categories are mapped to a canonical key (`hairdresser`/`berber`/`kuaför` → `barber`). Records are then matched on normalized domain, phone, or a fuzzy name (character ratio plus trigram, ignoring generic words like "salon"/"restoran") within 250 m, so OSM and Overture rows for one business merge instead of splitting. See `lead_hunter/normalize.py`.
+
 ## CRM
 
 Sales pipeline:
