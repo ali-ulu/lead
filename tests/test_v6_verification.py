@@ -5,7 +5,87 @@ from unittest.mock import patch
 
 import lead_hunter.db as db
 import lead_hunter.services as services
-from lead_hunter.providers.web_search import _score_result
+from lead_hunter.providers.web_search import (
+    _duckduckgo_search,
+    _score_result,
+    configured_provider,
+    verify_business_web,
+)
+
+
+class _FakeResponse:
+    def __init__(self, body: bytes):
+        self._body = body
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+DDG_HTML = b"""
+<div class="result">
+  <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample-dental.pk%2F">Example Dental</a>
+  <a class="result__snippet">Example Dental in Karachi, official website</a>
+</div>
+<div class="result">
+  <a class="result__a" href="https://instagram.com/exampledental">Example Dental (@exampledental)</a>
+</div>
+"""
+
+
+class WebSearchProviderTests(unittest.TestCase):
+    def setUp(self):
+        self._saved = {
+            key: __import__("os").environ.pop(key, None)
+            for key in ("LEADSCOUT_WEB_SEARCH", "BRAVE_SEARCH_API_KEY", "SEARXNG_URL")
+        }
+
+    def tearDown(self):
+        import os
+        for key, value in self._saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def test_provider_precedence(self):
+        import os
+        self.assertEqual(configured_provider(), "duckduckgo")
+        os.environ["SEARXNG_URL"] = "http://127.0.0.1:8080"
+        self.assertEqual(configured_provider(), "searxng")
+        os.environ["BRAVE_SEARCH_API_KEY"] = "key"
+        self.assertEqual(configured_provider(), "brave")
+        os.environ["LEADSCOUT_WEB_SEARCH"] = "searxng"
+        self.assertEqual(configured_provider(), "searxng")
+        os.environ["LEADSCOUT_WEB_SEARCH"] = "off"
+        self.assertEqual(configured_provider(), "")
+
+    def test_duckduckgo_results_are_parsed_and_unwrapped(self):
+        with patch(
+            "lead_hunter.providers.web_search.urllib.request.urlopen",
+            return_value=_FakeResponse(DDG_HTML),
+        ):
+            results = _duckduckgo_search("Example Dental Karachi", count=5)
+        self.assertEqual(results[0]["url"], "https://example-dental.pk/")
+        self.assertEqual(results[0]["title"], "Example Dental")
+        self.assertIn("official website", results[0]["description"])
+        self.assertEqual(results[1]["url"], "https://instagram.com/exampledental")
+
+    def test_duckduckgo_fallback_scores_as_official_site(self):
+        with patch(
+            "lead_hunter.providers.web_search.urllib.request.urlopen",
+            return_value=_FakeResponse(DDG_HTML),
+        ):
+            check = verify_business_web(name="Example Dental", city="Karachi", country="Pakistan")
+        self.assertTrue(check["configured"])
+        self.assertEqual(check["provider"], "duckduckgo")
+        self.assertTrue(check["verified"])
+        self.assertEqual(check["website"], "https://example-dental.pk/")
 
 
 class V6VerificationTests(unittest.TestCase):

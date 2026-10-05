@@ -101,7 +101,7 @@ class Handler(BaseHTTPRequestHandler):
         if path in {"/api/health","/api/v1/health"}:
             return self._json({
                 "ok":True,"name":"LeadScout","version":"7.0.0",
-                "providers":["OpenStreetMap/Overpass","Overture Places","Brave/SearXNG web verification","Google Places reputation (optional)"],
+                "providers":["OpenStreetMap/Overpass","Overture Places","DuckDuckGo/Brave/SearXNG web verification","Google Places reputation (optional)"],
                 "languages":["en","tr","ur","sd","de"],"agent_api":"/api/v1",
                 "openapi":"/api/v1/openapi.json","mcp":"mcp_server.py",
                 "meta_oauth_configured":{
