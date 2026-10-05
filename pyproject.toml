@@ -15,5 +15,8 @@ dependencies = [
 [project.optional-dependencies]
 agents = ["mcp>=2,<3"]
 
+[project.scripts]
+leadscout-doctor = "lead_hunter.doctor:main"
+
 [tool.setuptools]
 packages = ["lead_hunter"]

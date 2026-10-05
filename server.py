@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlparse
 from lead_hunter.agent import get_job, run_sales_job
 from lead_hunter.crm import add_note, list_activities, mark_stale_no_response, set_engagement, set_follow_up
 from lead_hunter.db import clear_all, get_lead, get_search_run, initialize, list_leads
+from lead_hunter.doctor import run_checks
 from lead_hunter.exporters import csv_bytes, xlsx_bytes
 from lead_hunter.oauth_meta import (
     disconnect, facebook_oauth_start_url, handle_callback, handle_facebook_callback,
@@ -99,9 +100,13 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized(path): return self._json({"error":"unauthorized"},401)
 
         if path in {"/api/health","/api/v1/health"}:
+            checks=run_checks()
             return self._json({
                 "ok":True,"name":"LeadScout","version":"7.0.0",
                 "providers":["OpenStreetMap/Overpass","Overture Places","DuckDuckGo/Google/Brave/SearXNG web verification","Google Places reputation (optional)"],
+                "provider_status":checks["providers"],
+                "degraded":not checks["ok"],
+                "problems":checks["problems"],
                 "languages":["en","tr","ur","sd","de"],"agent_api":"/api/v1",
                 "openapi":"/api/v1/openapi.json","mcp":"mcp_server.py",
                 "meta_oauth_configured":{
