@@ -154,6 +154,57 @@ class UpsertPreservesMeasurementsTests(unittest.TestCase):
         self.assertEqual(row["name"], "Karachi One Renamed")
         self.assertEqual(row["seo_score"], 10)
 
+    def test_rediscovery_keeps_enriched_email_and_phone(self):
+        # Discovery often carries no email/phone; enrich_lead fills them later.
+        # A later search on the same city must not erase that work.
+        db.upsert_leads([dict(DISCOVERED)])
+        self._patch(email="'found@example.com'", phone="'+491234567'")
+
+        incoming = dict(DISCOVERED)
+        incoming["email"] = None
+        incoming["phone"] = None
+        db.upsert_leads([incoming])
+
+        row = self._lead()
+        self.assertEqual(row["email"], "found@example.com")
+        self.assertEqual(row["phone"], "+491234567")
+
+    def test_rediscovery_keeps_coordinates_when_source_omits_them(self):
+        db.upsert_leads([dict(DISCOVERED)])
+        self._patch(latitude=52.52, longitude=13.405)
+
+        incoming = dict(DISCOVERED)
+        incoming["latitude"] = None
+        incoming["longitude"] = None
+        db.upsert_leads([incoming])
+
+        row = self._lead()
+        self.assertEqual(row["latitude"], 52.52)
+        self.assertEqual(row["longitude"], 13.405)
+
+    def test_discovery_still_fills_empty_contact_fields(self):
+        db.upsert_leads([dict(DISCOVERED)])
+        self._patch(email="NULL", phone="NULL")
+
+        incoming = dict(DISCOVERED)
+        incoming["email"] = "new@example.com"
+        incoming["phone"] = "+905000000009"
+        db.upsert_leads([incoming])
+
+        row = self._lead()
+        self.assertEqual(row["email"], "new@example.com")
+        self.assertEqual(row["phone"], "+905000000009")
+
+    def test_missing_category_is_cleared_on_rediscovery(self):
+        db.upsert_leads([dict(DISCOVERED)])
+        self._patch(category="'wrong_category'")
+
+        incoming = dict(DISCOVERED)
+        incoming["category"] = None
+        db.upsert_leads([incoming])
+
+        self.assertIsNone(self._lead()["category"])
+
 
 if __name__ == "__main__":
     unittest.main()

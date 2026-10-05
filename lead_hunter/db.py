@@ -159,10 +159,32 @@ def upsert_leads(rows: list[dict[str, Any]]) -> list[int]:
                 "data_confidence","contactability_score","commercial_score",
                 "intelligence_reasons","lead_score","score_reasons",
             }
+            # Bir kesif satiri bu alanlari tasimayabilir (kaynak bos birakti ya da
+            # enrich_lead/verify_lead degeri kesifte olmayan bir sayfadan buldu).
+            # Bos gelen kesif degeri mevcut degeri silmemeli; dolu gelen kesif
+            # degeri ise bos alani doldurabilmeli. Bu yuzden burada "bos degilse
+            # yaz" (gap-fill) uygulanir. Aksi halde ayni sehirde tekrar arama
+            # yapmak, enrichment'in buldugu e-posta/telefonu ve koordinatlari
+            # kalici olarak siler.
+            discovery_gap_fill = {
+                "website","phone","email","country","city","latitude","longitude",
+            }
+            # Bu alanlar kesif turunda her zaman dolu gelir; bos gelirse (kaynak
+            # kategori vermediyse) bayat bir deger tutmak yerine temizlenir.
+            discovery_clearable = {"category"}
 
             assignments: list[str] = []
             for column in columns:
                 if column in protected:
+                    continue
+                if column in discovery_gap_fill:
+                    assignments.append(
+                        f"{column}=CASE WHEN excluded.{column} IS NULL "
+                        f"THEN leads.{column} ELSE excluded.{column} END"
+                    )
+                    continue
+                if column in discovery_clearable:
+                    assignments.append(f"{column}=excluded.{column}")
                     continue
                 if column == "website_status":
                     # Gerilim (regression) olmasin. Kesif turu yalnizca "unknown"
