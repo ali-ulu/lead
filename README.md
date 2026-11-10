@@ -194,6 +194,19 @@ LeadScout audits each available website into five inspectable scores:
 - **AI Visibility**: weighted readiness from SEO, AEO and GEO.
 - **Opportunity Gap**: digital visibility weakness weighted with commercial opportunity.
 
+Every scorecard carries a `score_confidence` label per axis so a reader can tell
+how each number was produced: `lighthouse` (measured), `composite` (blended
+sub-scores), `heuristic` (markup signals only) or `verified_missing` (verified
+that no site exists). `query_leads` also returns `ai_visibility_score_percentile`
+so a lead can be read as a position within its current sample ("top 20% here"),
+since absolute scores are not comparable across markets.
+
+For a measurement rather than a readiness heuristic, set `LEADSCOUT_AI_PRESENCE=1`
+and call `POST /api/v1/leads/{id}/ai-presence` (or the `measure_ai_presence` MCP
+tool). It runs the category/city questions a person would ask and records whether
+the business is cited, with the mention rate and best rank, stored separately as
+`ai_presence`. It spends web-search quota, so it is opt-in.
+
 Google's generative-search guidance still relies on normal SEO fundamentals; LeadScout therefore does not award magic points for llms.txt or deprecated FAQ rich-result tricks.
 
 A verified business with no independent website receives zero owned-web readiness scores and a high Opportunity Gap. An unverified missing website remains unscored until verification.

@@ -228,10 +228,13 @@ class ErasureTests(unittest.TestCase):
         self.assertEqual(remaining, 0)
 
     def test_purge_keeps_recent_and_engaged(self):
-        old = self._insert("Old", updated="2020-01-01 00:00:00")
-        self._insert("OldEngaged", updated="2020-01-01 00:00:00", engagement="contacted")
-        self._insert("OldDnc", updated="2020-01-01 00:00:00", dnc=1)
-        self._insert("Fresh", updated="2026-10-05 00:00:00")
+        from datetime import datetime, timedelta, timezone
+        old_ts = (datetime.now(timezone.utc) - timedelta(days=60)).strftime("%Y-%m-%d %H:%M:%S")
+        fresh_ts = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+        old = self._insert("Old", updated=old_ts)
+        self._insert("OldEngaged", updated=old_ts, engagement="contacted")
+        self._insert("OldDnc", updated=old_ts, dnc=1)
+        self._insert("Fresh", updated=fresh_ts)
 
         purged = self.db.purge_stale_leads(days=30)
 

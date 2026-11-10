@@ -21,7 +21,12 @@ EXPORT_COLUMNS = [
     ("aeo_score", "AEO"),
     ("geo_score", "GEO"),
     ("ai_visibility_score", "AI Visibility"),
+    ("ai_visibility_score_percentile", "AI Visibility Percentile"),
     ("opportunity_gap_score", "Opportunity Gap"),
+    ("score_confidence", "Score Confidence"),
+    ("ttfb_ms", "TTFB (ms)"),
+    ("response_ms", "Response (ms)"),
+    ("ai_presence", "AI Presence"),
     ("verification_status", "Verification"),
     ("website_status", "Website Status"),
     ("website", "Website"),
@@ -56,6 +61,11 @@ def _flat_row(row: dict[str, Any]) -> dict[str, Any]:
     flat = dict(row)
     for platform in ("instagram", "facebook", "linkedin", "x", "youtube", "tiktok", "telegram", "whatsapp"):
         flat[platform] = socials.get(platform, "")
+    # Structured cells (confidence labels, measured AI presence) go out as JSON
+    # rather than a Python repr so spreadsheets and downstream parsers agree.
+    for key in ("score_confidence", "ai_presence", "visibility_reasons", "visibility_signals"):
+        if isinstance(flat.get(key), (dict, list)):
+            flat[key] = json.dumps(flat[key], ensure_ascii=False, sort_keys=True)
     return flat
 
 
@@ -165,6 +175,27 @@ def _leads_matrix(rows: list[dict[str, Any]]) -> list[list[Any]]:
     return matrix
 
 
+def _ai_presence(row: dict[str, Any]) -> dict[str, Any]:
+    value = row.get("ai_presence")
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _ai_presence_measured(row: dict[str, Any]) -> bool:
+    return bool(_ai_presence(row).get("measured"))
+
+
+def _ai_presence_cited(row: dict[str, Any]) -> bool:
+    return bool(_ai_presence(row).get("cited_count"))
+
+
 def _summary_matrix(rows: list[dict[str, Any]]) -> list[list[Any]]:
     flat = [_flat_row(r) for r in rows]
     total = len(flat)
@@ -196,6 +227,9 @@ def _summary_matrix(rows: list[dict[str, Any]]) -> list[list[Any]]:
         ["Ortalama AEO skoru", _average([_number(r.get("aeo_score")) for r in flat])],
         ["Ortalama GEO skoru", _average([_number(r.get("geo_score")) for r in flat])],
         ["Ortalama AI görünürlük skoru", _average([_number(r.get("ai_visibility_score")) for r in flat])],
+        ["Lighthouse ile ölçülen", count(lambda r: "lighthouse" in (r.get("audit_engine") or ""))],
+        ["AI varlığı ölçülen", count(lambda r: _ai_presence_measured(r))],
+        ["AI yanıtlarında geçen", count(lambda r: _ai_presence_cited(r))],
         ["İletişime geçilmiş", engaged],
         ["Yanıt alınmış", count(lambda r: (r.get("engagement_status") or "") == "replied" or bool(r.get("last_reply_at")))],
         ["İletişime geçilmemiş", total - engaged],

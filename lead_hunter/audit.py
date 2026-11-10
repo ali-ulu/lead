@@ -6,8 +6,6 @@ import shutil
 import subprocess
 import ssl
 import time
-import socket
-import ipaddress
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -16,6 +14,8 @@ from pathlib import Path
 from typing import Any
 from datetime import datetime, timezone
 
+from . import cache
+from . import config
 from .visibility import calculate_visibility
 from . import netguard
 
@@ -32,6 +32,19 @@ SOCIAL_HOSTS = {
     "telegram": ("t.me", "telegram.me"),
     "whatsapp": ("wa.me", "api.whatsapp.com", "whatsapp.com"),
 }
+
+# Placeholder for the rendered-evidence hook. A headless renderer (for example
+# a Lighthouse report that already contains the rendered DOM) can register a
+# callable here to supply the HTML a JS-heavy site actually serves. The default
+# is a plain fetch, which is why SPAs used to score near zero in every category.
+_RENDERER = None
+
+
+def set_renderer(renderer) -> None:
+    """Register (or clear, with ``None``) the HTML renderer used for evidence."""
+    global _RENDERER
+    _RENDERER = renderer
+
 
 class SignalParser(HTMLParser):
     def __init__(self):
@@ -190,12 +203,15 @@ def normalize_url(url: str) -> str:
     return url
 
 def _speed_proxy(ms: int) -> int:
-    if ms > 5000: return 20
-    if ms > 3000: return 35
-    if ms > 2000: return 50
-    if ms > 1200: return 65
-    if ms > 700: return 78
-    return 90
+    """Map time-to-first-byte (ms) to a continuous 0-100 performance proxy.
+
+    The old version used six coarse buckets, so 700 ms and 1200 ms scored the
+    same. A smooth curve keeps ordering stable and avoids score cliffs.
+    """
+    if ms <= 0:
+        return 90
+    # 200 ms -> 95, 700 ms -> 81, 1200 ms -> 70, 2500 ms -> 50, 5000 ms -> 31.
+    return max(5, min(100, round(100 / (1 + (ms / 2500.0) ** 1.15))))
 
 def _assert_public_host(url: str) -> None:
     """Backwards-compatible alias for the shared SSRF guard."""
@@ -253,18 +269,45 @@ def _lighthouse(url: str, timeout: int = 90) -> dict[str, Any] | None:
         def score(name: str):
             value=(cats.get(name) or {}).get("score")
             return round(float(value)*100) if value is not None else None
+        audits = report.get("audits") or {}
         return {
             "performance_score":score("performance"),
             "accessibility_score":score("accessibility"),
             "best_practices_score":score("best-practices"),
             "seo_score":score("seo"),
             "lighthouse_version":report.get("lighthouseVersion"),
+            "rendered_html":_lighthouse_rendered_html(audits),
         }
     except Exception:
         return None
 
+
+def _lighthouse_rendered_html(audits: dict[str, Any]) -> str | None:
+    """Extract the DOM Lighthouse rendered, when the report carries it.
+
+    ``--output=json`` does not include the serialized DOM by default, so this
+    returns ``None`` unless a run was configured to capture it. It exists so a
+    caller can feed rendered markup back through ``set_renderer`` without a
+    second headless pass.
+    """
+    for key in ("final-screenshot", "full-page-screenshot"):
+        node = audits.get(key) or {}
+        value = (node.get("details") or {}).get("html")
+        if isinstance(value, str) and value.strip():
+            return value
+    return None
+
+
 def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
     url = normalize_url(url)
+
+    if cache.enabled():
+        cached = cache.get("audit", [url])
+        if cached is not None:
+            cached = dict(cached)
+            cached["cached"] = True
+            return cached
+
     # A hostname that does not resolve is a finding, not an error: the business
     # advertises a domain that no longer exists. Resolving up front keeps that
     # case out of the request path and reports it as website_status "dead".
@@ -283,10 +326,16 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
             }
         raise
     if os.environ.get("LEADSCOUT_RESPECT_ROBOTS", "1") == "1" and not netguard.robots_allows(url):
+        # robots.txt disallow is an indexability signal, not a dead end: the
+        # business asks crawlers to stay out, so we do not fetch, but the
+        # finding is surfaced so the score can reflect it instead of silently
+        # producing a normal page audit.
         return {
             "reachable": False,
             "website_status": "blocked",
             "error": "Blocked by robots.txt",
+            "indexable": False,
+            "robots_blocked": True,
             "social_links": {},
         }
     _AUDIT_LIMITER.wait()
@@ -295,143 +344,176 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
     start = time.perf_counter()
     try:
         with opener.open(req, timeout=timeout) as resp:
+            ttfb_ms = round((time.perf_counter() - start) * 1000)
             raw = resp.read(1_800_000)
-            body = raw.decode(resp.headers.get_content_charset() or "utf-8", errors="replace")
             elapsed = round((time.perf_counter() - start) * 1000)
-            parser = SignalParser()
-            parser.feed(body)
+            body = raw.decode(resp.headers.get_content_charset() or "utf-8", errors="replace")
+            header_noindex = "noindex" in (resp.headers.get("X-Robots-Tag", "") or "").lower()
             final = resp.geturl()
-            _assert_public_host(final)
-            title_match = re.search(r"<title[^>]*>(.*?)</title>", body, flags=re.I | re.S)
-            title = re.sub(r"\s+", " ", title_match.group(1)).strip() if title_match else ""
-            years = [int(y) for y in re.findall(r"(?:©|copyright[^0-9]{0,15})(20\d{2})", body, flags=re.I)]
-            latest_year = max(years) if years else None
-            seo_score = 100
-            if not title: seo_score -= 30
-            if not parser.meta_description: seo_score -= 25
-            if parser.h1 == 0: seo_score -= 20
-            if not parser.viewport: seo_score -= 15
-            seo_score = max(0, seo_score)
-            quality_flags: list[str] = []
-            if not parser.viewport: quality_flags.append("No mobile viewport")
-            if not (parser.tel or parser.contact or parser.forms): quality_flags.append("No clear contact CTA")
-            if not parser.booking: quality_flags.append("No booking/reservation signal")
-            if not final.startswith("https://"): quality_flags.append("HTTPS missing")
-            if elapsed > 2500: quality_flags.append("Slow first response")
-            if not title: quality_flags.append("Missing page title")
-            if not parser.meta_description: quality_flags.append("Missing meta description")
-            if parser.images and parser.alt_images / max(1, parser.images) < 0.5: quality_flags.append("Many images lack alt text")
-            if latest_year and latest_year <= 2022: quality_flags.append(f"Old copyright signal ({latest_year})")
-            lighthouse = _lighthouse(final)
-            performance_score = (lighthouse or {}).get("performance_score")
-            accessibility_score = (lighthouse or {}).get("accessibility_score")
-            lighthouse_seo = (lighthouse or {}).get("seo_score")
-            if performance_score is None:
-                performance_score = _speed_proxy(elapsed)
-            if lighthouse_seo is not None:
-                seo_score = lighthouse_seo
-            schema_types, schema_fields = _structured_data(parser.jsonld_blocks)
-            business_schema = any(
-                t == "LocalBusiness"
-                or t.endswith("Business")
-                or t in {"Restaurant","Dentist","MedicalBusiness","ProfessionalService","Store","Hotel"}
-                for t in schema_types
-            )
-            organization_schema = "Organization" in schema_types
-            body_text = " ".join(parser.text_parts)
-            words = re.findall(r"\b[\w'-]+\b", body_text, flags=re.UNICODE)
-            question_headings = sum(
-                1 for heading in parser.heading_texts
-                if "?" in heading or heading.lower().startswith((
-                    "what ","why ","how ","when ","where ","who ","can ","do ","does ","is ","are ",
-                    "nedir ","nasıl ","neden ","ne zaman ","nerede ","kim ","کیا ","کیسے ","ڇا ","ڪيئن "
-                ))
-            )
-            final_host = (urllib.parse.urlparse(final).hostname or "").lower().removeprefix("www.")
-            external_hosts: set[str] = set()
-            social_hosts = {host for hosts in SOCIAL_HOSTS.values() for host in hosts}
-            for href in parser.hrefs:
-                if not href.startswith(("http://","https://")):
-                    continue
-                host = (urllib.parse.urlparse(href).hostname or "").lower().removeprefix("www.")
-                if not host or host == final_host or host.endswith("." + final_host):
-                    continue
-                # Social profiles are entity-identity evidence, not citations/source links.
-                if any(host == social or host.endswith("." + social) for social in social_hosts):
-                    continue
-                external_hosts.add(host)
-            fact_signals = len(re.findall(r"(?<!\w)(?:\d+[\d.,%]*|[$€£₺₨]\s?\d+)(?!\w)", body_text))
-            year_now = datetime.now(timezone.utc).year
-            fresh_signal = any(str(year_now) in value or str(year_now - 1) in value for value in parser.time_values)
-            if latest_year and latest_year >= year_now - 1:
-                fresh_signal = True
+            status = getattr(resp, "status", 200)
+    except (urllib.error.URLError, TimeoutError, ssl.SSLError) as exc:
+        return {"reachable": False, "error": str(exc), "website_status": "weak", "social_links": {}}
 
-            visibility_evidence = {
-                "indexable": not parser.robots_noindex,
-                "title": title,
-                "meta_description": parser.meta_description,
-                "h1_count": parser.h1,
-                "h2_h3_count": parser.h2 + parser.h3,
-                "canonical": parser.canonical,
-                "has_https": final.startswith("https://"),
-                "mobile_ok": parser.viewport,
-                "performance_score": performance_score,
-                "lighthouse_seo_score": lighthouse_seo,
-                "word_count": len(words),
-                "question_headings": question_headings,
-                "business_schema": business_schema,
-                "organization_schema": organization_schema,
-                "schema_types": schema_types,
-                "schema_fields": schema_fields,
-                "external_links": len(external_hosts),
-                "fact_signals": fact_signals,
-                "author_signal": parser.meta_author,
-                "fresh_signal": fresh_signal,
-                "semantic_main": parser.semantic_main,
-                "social_count": len(parser.social_links),
-                "contact_signal": parser.tel or parser.contact or parser.forms > 0,
-            }
-            visibility = calculate_visibility(visibility_evidence, commercial_score=0)
-            seo_score = visibility["seo_score"]
+    try:
+        _assert_public_host(final)
+        lighthouse = _lighthouse(final)
+        # Prefer a real rendered DOM over the raw shell: an explicit renderer
+        # wins, otherwise reuse the markup Lighthouse's headless Chrome already
+        # fetched. Without this an SPA scores on an empty <div id="app">.
+        effective_html = body
+        rendered = None
+        if _RENDERER is not None:
+            try:
+                rendered = _RENDERER(final)
+            except Exception:
+                rendered = None
+        if not rendered:
+            rendered = (lighthouse or {}).get("rendered_html")
+        if rendered and len(rendered) > len(body):
+            effective_html = rendered
+        parser = SignalParser()
+        parser.feed(effective_html)
+        title_match = re.search(r"<title[^>]*>(.*?)</title>", effective_html, flags=re.I | re.S)
+        title = re.sub(r"\s+", " ", title_match.group(1)).strip() if title_match else ""
+        years = [int(y) for y in re.findall(r"(?:©|copyright[^0-9]{0,15})(20\d{2})", effective_html, flags=re.I)]
+        latest_year = max(years) if years else None
+        quality_flags: list[str] = []
+        if not parser.viewport: quality_flags.append("No mobile viewport")
+        if not (parser.tel or parser.contact or parser.forms): quality_flags.append("No clear contact CTA")
+        if not parser.booking: quality_flags.append("No booking/reservation signal")
+        if not final.startswith("https://"): quality_flags.append("HTTPS missing")
+        if ttfb_ms > config.SPEED_FLAG_MS: quality_flags.append("Slow first response")
+        if not title: quality_flags.append("Missing page title")
+        if not parser.meta_description: quality_flags.append("Missing meta description")
+        if parser.images and parser.alt_images / max(1, parser.images) < 0.5: quality_flags.append("Many images lack alt text")
+        if latest_year and latest_year <= 2022: quality_flags.append(f"Old copyright signal ({latest_year})")
+        performance_score = (lighthouse or {}).get("performance_score")
+        accessibility_score = (lighthouse or {}).get("accessibility_score")
+        best_practices_score = (lighthouse or {}).get("best_practices_score")
+        lighthouse_seo = (lighthouse or {}).get("seo_score")
+        if performance_score is None:
+            # No real Lighthouse run: fall back to a TTFB proxy, which reflects
+            # server responsiveness rather than full-page download time.
+            performance_score = _speed_proxy(ttfb_ms)
+        schema_types, schema_fields = _structured_data(parser.jsonld_blocks)
+        business_schema = any(
+            t == "LocalBusiness"
+            or t.endswith("Business")
+            or t in {"Restaurant","Dentist","MedicalBusiness","ProfessionalService","Store","Hotel"}
+            for t in schema_types
+        )
+        organization_schema = "Organization" in schema_types
+        body_text = " ".join(parser.text_parts)
+        words = re.findall(r"\b[\w'-]+\b", body_text, flags=re.UNICODE)
+        question_headings = sum(
+            1 for heading in parser.heading_texts
+            if "?" in heading or heading.lower().startswith((
+                "what ","why ","how ","when ","where ","who ","can ","do ","does ","is ","are ",
+                "nedir ","nasıl ","neden ","ne zaman ","nerede ","kim ","کیا ","کیسے ","ڇا ","ڪيئن "
+            ))
+        )
+        final_host = (urllib.parse.urlparse(final).hostname or "").lower().removeprefix("www.")
+        external_hosts: set[str] = set()
+        social_hosts = {host for hosts in SOCIAL_HOSTS.values() for host in hosts}
+        for href in parser.hrefs:
+            if not href.startswith(("http://","https://")):
+                continue
+            host = (urllib.parse.urlparse(href).hostname or "").lower().removeprefix("www.")
+            if not host or host == final_host or host.endswith("." + final_host):
+                continue
+            # Social profiles are entity-identity evidence, not citations/source links.
+            if any(host == social or host.endswith("." + social) for social in social_hosts):
+                continue
+            external_hosts.add(host)
+        fact_signals = len(re.findall(r"(?<!\w)(?:\d+[\d.,%]*|[$€£₺₨]\s?\d+)(?!\w)", body_text))
+        year_now = datetime.now(timezone.utc).year
+        fresh_signal = any(str(year_now) in value or str(year_now - 1) in value for value in parser.time_values)
+        if latest_year and latest_year >= year_now - 1:
+            fresh_signal = True
+        # A page whose copyright is years old is stale evidence even if nothing
+        # else is dated; without this a 2019 site scored as "fresh".
+        if latest_year and latest_year < year_now - 2:
+            fresh_signal = False
 
-            weak = (
-                len(quality_flags) >= 2
-                or (not parser.viewport)
-                or (not final.startswith("https://"))
-                or (performance_score is not None and performance_score < 45)
-                or (seo_score is not None and seo_score < 55)
-            )
-            return {
-                "reachable": True,
-                "status": getattr(resp, "status", 200),
-                "final_url": final,
-                "has_https": final.startswith("https://"),
-                "response_ms": elapsed,
-                "performance_score": performance_score,
-                "accessibility_score": accessibility_score,
-                "best_practices_score": (lighthouse or {}).get("best_practices_score"),
-                "seo_score": seo_score,
-                "lighthouse_seo_score": lighthouse_seo,
-                "aeo_score": visibility["aeo_score"],
-                "geo_score": visibility["geo_score"],
-                "ai_visibility_score": visibility["ai_visibility_score"],
-                "opportunity_gap_score": visibility["opportunity_gap_score"],
-                "visibility_reasons": visibility["visibility_reasons"],
-                "visibility_signals": visibility["visibility_signals"],
-                "visibility_score_note": visibility["score_note"],
-                "audit_engine": "lighthouse+visibility+heuristic" if lighthouse else "visibility+heuristic",
-                "mobile_ok": parser.viewport,
-                "has_cta": parser.tel or parser.contact or parser.forms > 0,
-                "has_booking": parser.booking,
-                "has_tel_link": parser.tel,
-                "has_contact_path": parser.contact,
-                "form_count": parser.forms,
-                "title": title,
-                "latest_copyright_year": latest_year,
-                "quality_flags": quality_flags,
-                "social_links": parser.social_links,
-                "website_status": "weak" if weak else "healthy",
-                "note": "Lighthouse scores are used when a local Lighthouse binary is available; otherwise performance falls back to a response-time proxy.",
-            }
+        visibility_evidence = {
+            "indexable": not parser.robots_noindex and not header_noindex,
+            "robots_noindex": parser.robots_noindex,
+            "header_noindex": header_noindex,
+            "title": title,
+            "meta_description": parser.meta_description,
+            "h1_count": parser.h1,
+            "h2_h3_count": parser.h2 + parser.h3,
+            "canonical": parser.canonical,
+            "has_https": final.startswith("https://"),
+            "mobile_ok": parser.viewport,
+            "performance_score": performance_score,
+            "lighthouse_seo_score": lighthouse_seo,
+            "accessibility_score": accessibility_score,
+            "best_practices_score": best_practices_score,
+            "word_count": len(words),
+            "question_headings": question_headings,
+            "business_schema": business_schema,
+            "organization_schema": organization_schema,
+            "schema_types": schema_types,
+            "schema_fields": schema_fields,
+            "external_links": len(external_hosts),
+            "fact_signals": fact_signals,
+            "author_signal": parser.meta_author,
+            "fresh_signal": fresh_signal,
+            "semantic_main": parser.semantic_main,
+            "social_count": len(parser.social_links),
+            "contact_signal": parser.tel or parser.contact or parser.forms > 0,
+            "ttfb_ms": ttfb_ms,
+        }
+        visibility = calculate_visibility(visibility_evidence, commercial_score=0)
+        seo_score = visibility["seo_score"]
+
+        weak = (
+            len(quality_flags) >= 2
+            or (not parser.viewport)
+            or (not final.startswith("https://"))
+            or (performance_score is not None and performance_score < 45)
+            or (seo_score is not None and seo_score < 55)
+        )
+        result = {
+            "reachable": True,
+            "status": status,
+            "final_url": final,
+            "has_https": final.startswith("https://"),
+            "response_ms": elapsed,
+            "ttfb_ms": ttfb_ms,
+            "performance_score": performance_score,
+            "accessibility_score": accessibility_score,
+            "best_practices_score": best_practices_score,
+            "seo_score": seo_score,
+            "lighthouse_seo_score": lighthouse_seo,
+            "aeo_score": visibility["aeo_score"],
+            "geo_score": visibility["geo_score"],
+            "ai_visibility_score": visibility["ai_visibility_score"],
+            "opportunity_gap_score": visibility["opportunity_gap_score"],
+            "score_confidence": visibility["score_confidence"],
+            "visibility_reasons": visibility["visibility_reasons"],
+            "visibility_signals": visibility["visibility_signals"],
+            "visibility_score_note": visibility["score_note"],
+            "audit_engine": "lighthouse+visibility+heuristic" if lighthouse else "visibility+heuristic",
+            "indexable": not parser.robots_noindex and not header_noindex,
+            "robots_noindex": parser.robots_noindex,
+            "header_noindex": header_noindex,
+            "mobile_ok": parser.viewport,
+            "has_cta": parser.tel or parser.contact or parser.forms > 0,
+            "has_booking": parser.booking,
+            "has_tel_link": parser.tel,
+            "has_contact_path": parser.contact,
+            "form_count": parser.forms,
+            "title": title,
+            "latest_copyright_year": latest_year,
+            "quality_flags": quality_flags,
+            "social_links": parser.social_links,
+            "website_status": "weak" if weak else "healthy",
+            "note": "Lighthouse scores are used when a local Lighthouse binary is available; otherwise performance falls back to a TTFB proxy.",
+        }
+        if cache.enabled():
+            cache.put("audit", [url], result)
+        return result
     except (urllib.error.URLError, TimeoutError, ssl.SSLError) as exc:
         return {"reachable": False, "error": str(exc), "website_status": "weak", "social_links": {}}

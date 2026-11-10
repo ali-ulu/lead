@@ -37,6 +37,9 @@ so a sweep never erases an active relationship or an opt-out record.
 **Politeness.** Auditing and enrichment respect `robots.txt`
 (`LEADSCOUT_RESPECT_ROBOTS=1`), send an identifying User-Agent, and can be
 spaced with `LEADSCOUT_AUDIT_MIN_INTERVAL` / `LEADSCOUT_FETCH_MIN_INTERVAL`.
-Outbound URLs are checked against private/reserved address ranges (SSRF guard),
-including on every redirect hop. See `lead_hunter/netguard.py`.
+When robots disallows a path the site is not fetched and is recorded as
+`website_status="blocked"` with `indexable=false`, so the finding shows up in
+the score instead of being a silent gap. Outbound URLs are checked against
+private/reserved address ranges (SSRF guard), including on every redirect hop.
+See `lead_hunter/netguard.py`.
 

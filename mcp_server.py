@@ -20,7 +20,7 @@ from lead_hunter.providers.osm import CATEGORY_FILTERS
 from lead_hunter.security import audit_agent_action, list_agent_audit, require_permission
 from lead_hunter.services import (
     audit_lead, discover_businesses, draft_outreach, enrich_lead, enrich_reputation,
-    mark_do_not_contact, query_leads, set_pipeline_stage, verify_lead,
+    mark_do_not_contact, measure_ai_presence_for_lead, query_leads, set_pipeline_stage, verify_lead,
 )
 
 mcp=MCPServer("LeadScout")
@@ -126,6 +126,13 @@ def enrich_reputation_data(lead_id:int) -> dict[str,Any]:
 def audit_website(lead_id:int) -> dict[str,Any]:
     """Run deep website audit; uses Lighthouse when installed and heuristic checks otherwise."""
     initialize(); return audit_lead(int(lead_id),enrich=True)
+
+@tool()
+def measure_ai_presence(lead_id:int) -> dict[str,Any]:
+    """Measure whether the business appears in answer-style search results (opt-in, spends search quota)."""
+    initialize()
+    audit_agent_action("measure_ai_presence",target=str(lead_id))
+    return measure_ai_presence_for_lead(int(lead_id))
 
 @tool()
 def draft_outreach_message(lead_id:int,lang:str="en") -> dict[str,Any]:

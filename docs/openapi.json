@@ -670,6 +670,29 @@
           }
         }
       }
+    },
+    "/api/v1/leads/{lead_id}/ai-presence": {
+      "post": {
+        "summary": "Measure whether the business is cited in answer-style search results (opt-in, spends search quota)",
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated lead and ai_presence measurement"
+          },
+          "502": {
+            "description": "Provider error"
+          }
+        }
+      }
     }
   },
   "components": {

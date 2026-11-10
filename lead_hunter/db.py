@@ -24,6 +24,10 @@ LEAD_MIGRATIONS = {
     "opportunity_gap_score": "INTEGER",
     "visibility_reasons": "TEXT NOT NULL DEFAULT '{}'",
     "visibility_signals": "TEXT NOT NULL DEFAULT '{}'",
+    "score_confidence": "TEXT NOT NULL DEFAULT '{}'",
+    "ai_presence": "TEXT NOT NULL DEFAULT '{}'",
+    "response_ms": "INTEGER",
+    "ttfb_ms": "INTEGER",
     "contactability_score": "INTEGER NOT NULL DEFAULT 0",
     "commercial_score": "INTEGER NOT NULL DEFAULT 0",
     "intelligence_reasons": "TEXT NOT NULL DEFAULT '[]'",
@@ -74,7 +78,12 @@ def initialize() -> None:
         # Snapshot the lead's state at scan time so run-to-run diffs can see
         # website/score changes that later updates would otherwise hide.
         run_lead_cols = {row["name"] for row in conn.execute("PRAGMA table_info(search_run_leads)").fetchall()}
-        for name, ddl in {"website_status": "TEXT", "lead_score": "INTEGER"}.items():
+        for name, ddl in {
+            "website_status": "TEXT",
+            "lead_score": "INTEGER",
+            "ai_visibility_score": "INTEGER",
+            "opportunity_gap_score": "INTEGER",
+        }.items():
             if name not in run_lead_cols:
                 conn.execute(f"ALTER TABLE search_run_leads ADD COLUMN {name} {ddl}")
         conn.commit()
@@ -94,7 +103,7 @@ def _decode(row: sqlite3.Row | None) -> dict[str, Any] | None:
     for key, fallback in {
         "score_reasons": [], "social_links": {}, "messaging_ids": {}, "source_refs": {},
         "verification_notes": [], "intelligence_reasons": [], "visibility_reasons": {},
-        "visibility_signals": {},
+        "visibility_signals": {}, "score_confidence": {}, "ai_presence": {},
     }.items():
         item[key] = _loads(item.get(key), fallback)
     for key in ("mobile_ok","has_cta","has_booking","has_https","do_not_contact"):
@@ -103,7 +112,7 @@ def _decode(row: sqlite3.Row | None) -> dict[str, Any] | None:
     return item
 
 def _jsonify(clean: dict[str, Any]) -> dict[str, Any]:
-    for key in ("social_links","messaging_ids","source_refs","visibility_reasons","visibility_signals"):
+    for key in ("social_links","messaging_ids","source_refs","visibility_reasons","visibility_signals","score_confidence","ai_presence"):
         if isinstance(clean.get(key), dict):
             clean[key] = json.dumps(clean[key], ensure_ascii=False, sort_keys=True)
     for key in ("score_reasons","verification_notes","intelligence_reasons"):
@@ -117,7 +126,8 @@ def upsert_leads(rows: list[dict[str, Any]]) -> list[int]:
         "source","source_id","source_refs","name","country","city","category","latitude","longitude",
         "website","phone","email","social_url","social_links","messaging_ids","website_status",
         "verification_status","verification_notes","performance_score","seo_score","aeo_score","geo_score",
-        "ai_visibility_score","opportunity_gap_score","visibility_reasons","visibility_signals","accessibility_score",
+        "ai_visibility_score","opportunity_gap_score","visibility_reasons","visibility_signals",
+        "score_confidence","ai_presence","response_ms","ttfb_ms","accessibility_score",
         "mobile_ok","has_cta","has_booking","has_https","audit_engine","rating","review_count",
         "data_confidence","contactability_score","commercial_score","intelligence_reasons",
         "lead_score","score_reasons","pipeline_status","engagement_status","follow_up_at","notes",
@@ -142,6 +152,8 @@ def upsert_leads(rows: list[dict[str, Any]]) -> list[int]:
             lead.setdefault("intelligence_reasons", [])
             lead.setdefault("visibility_reasons", {})
             lead.setdefault("visibility_signals", {})
+            lead.setdefault("score_confidence", {})
+            lead.setdefault("ai_presence", {})
             lead = _jsonify(lead)
             values = [lead.get(c) for c in columns]
 
@@ -158,6 +170,7 @@ def upsert_leads(rows: list[dict[str, Any]]) -> list[int]:
                 "ai_visibility_score","opportunity_gap_score",
                 "accessibility_score","mobile_ok","has_cta","has_booking",
                 "has_https","audit_engine","visibility_reasons","visibility_signals",
+                "score_confidence","ai_presence","response_ms","ttfb_ms",
                 # dogrulama ve itibar
                 "verification_status","verification_notes","rating","review_count",
                 # iletisim kanallari ve turetilmis alanlar
@@ -229,17 +242,23 @@ def record_search_run(*, country: str, city: str, category: str, radius_km: int,
             (search_id,country,city,category,int(radius_km),len(lead_ids),
              json.dumps(provider_summary or {},ensure_ascii=False),int(partial),json.dumps(warnings or [],ensure_ascii=False)),
         )
-        snapshots: dict[int, tuple[str | None, int | None]] = {}
+        snapshots: dict[int, tuple] = {}
         if lead_ids:
             placeholders=",".join("?" for _ in lead_ids)
             for row in conn.execute(
-                f"SELECT id, website_status, lead_score FROM leads WHERE id IN ({placeholders})",
+                f"SELECT id, website_status, lead_score, ai_visibility_score, opportunity_gap_score "
+                f"FROM leads WHERE id IN ({placeholders})",
                 [int(i) for i in lead_ids],
             ).fetchall():
-                snapshots[int(row["id"])] = (row["website_status"], row["lead_score"])
+                snapshots[int(row["id"])] = (
+                    row["website_status"], row["lead_score"],
+                    row["ai_visibility_score"], row["opportunity_gap_score"],
+                )
         conn.executemany(
-            "INSERT OR IGNORE INTO search_run_leads(search_id,lead_id,website_status,lead_score) VALUES (?,?,?,?)",
-            [(search_id,int(i),*snapshots.get(int(i),(None,None))) for i in lead_ids],
+            "INSERT OR IGNORE INTO search_run_leads"
+            "(search_id,lead_id,website_status,lead_score,ai_visibility_score,opportunity_gap_score) "
+            "VALUES (?,?,?,?,?,?)",
+            [(search_id,int(i),*snapshots.get(int(i),(None,None,None,None))) for i in lead_ids],
         )
         conn.commit()
     return search_id
@@ -293,7 +312,8 @@ def update_lead(lead_id: int, fields: dict[str, Any]) -> dict[str, Any] | None:
     allowed = {
         "website","phone","email","social_url","social_links","messaging_ids","source_refs","website_status",
         "verification_status","verification_notes","performance_score","seo_score","aeo_score","geo_score",
-        "ai_visibility_score","opportunity_gap_score","visibility_reasons","visibility_signals","accessibility_score",
+        "ai_visibility_score","opportunity_gap_score","visibility_reasons","visibility_signals",
+        "score_confidence","ai_presence","response_ms","ttfb_ms","accessibility_score",
         "mobile_ok","has_cta","has_booking","has_https","audit_engine","rating","review_count",
         "data_confidence","contactability_score","commercial_score","intelligence_reasons",
         "pipeline_status","engagement_status","last_contacted_at","last_reply_at","follow_up_at","notes","do_not_contact"
@@ -351,14 +371,20 @@ def lead_ids_for_search(search_id: str) -> list[int]:
     return [int(r["lead_id"]) for r in rows]
 
 def snapshots_for_search(search_id: str) -> dict[int, dict[str, Any]]:
-    """Lead state as recorded when the search ran (website status and score)."""
+    """Lead state as recorded when the search ran (website status and scores)."""
     with connect() as conn:
         rows=conn.execute(
-            "SELECT lead_id, website_status, lead_score FROM search_run_leads WHERE search_id=?",
+            "SELECT lead_id, website_status, lead_score, ai_visibility_score, opportunity_gap_score "
+            "FROM search_run_leads WHERE search_id=?",
             (search_id,),
         ).fetchall()
     return {
-        int(r["lead_id"]): {"website_status": r["website_status"], "lead_score": r["lead_score"]}
+        int(r["lead_id"]): {
+            "website_status": r["website_status"],
+            "lead_score": r["lead_score"],
+            "ai_visibility_score": r["ai_visibility_score"],
+            "opportunity_gap_score": r["opportunity_gap_score"],
+        }
         for r in rows
     }
 

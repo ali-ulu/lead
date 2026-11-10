@@ -138,8 +138,15 @@ otomatik birleşmez, mevcut veritabanı için yeniden tarama gerekir.
 - [ ] Çok dilli outreach: `draft_outreach` için tr/en/ur/sd/de şablonları,
   takip planı ve yanıt takibi.
 - [ ] Şehir/bölge toplu tarama: bbox ızgarası ile il/ilçe kapsama, ilçe raporu.
-- [ ] Skor açıklanabilirliği: `lead_score` ağırlıkları yapılandırılabilir,
+- [x] Skor açıklanabilirliği: `lead_score` ağırlıkları yapılandırılabilir,
   her skorun "neden"i arayüzde gösterilsin.
+  → `lead_hunter/config.py` tek kaynak (`LEADSCOUT_SCORE_WEIGHTS` /
+  `LEADSCOUT_VISIBILITY_WEIGHTS`); her skor ekseni `score_confidence`
+  etiketiyle birlikte arayüzde "neden" listesiyle gösteriliyor.
+- [x] Gerçek AI yanıt varlığı ölçümü (opt-in) + örneklem-içi yüzdelik:
+  `POST /api/v1/leads/{id}/ai-presence` (MCP: `measure_ai_presence`),
+  `query_leads` çıktısında `ai_visibility_score_percentile`; HTTP liste/dışa
+  aktarma ve tek lead uçları da aynı yüzdelik etiketini döndürüyor.
 
 **Dosyalar:** `lead_hunter/exporters.py`, `lead_hunter/scoring.py`,
 `lead_hunter/outreach.py`, `static/`, `tests/test_exporters.py`.
