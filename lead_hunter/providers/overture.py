@@ -9,7 +9,10 @@ from .. import cache
 from .. import ratelimit
 
 STAC_URL = "https://stac.overturemaps.org/catalog.json"
-FALLBACK_RELEASE = "2026-08-19.0"
+# Used only when the STAC catalog is unreachable. Overture deletes old releases,
+# so this must point at a release that still exists; a stale value makes every
+# Overture scan fail with "No files found that match the pattern".
+FALLBACK_RELEASE = "2026-10-21.0"
 
 CATEGORY_ALIASES: dict[str, tuple[str, ...]] = {
     "dentist": ("dentist", "dental_clinic"),
@@ -20,8 +23,19 @@ CATEGORY_ALIASES: dict[str, tuple[str, ...]] = {
     "restaurant": ("restaurant", "casual_eatery"),
     "cafe": ("cafe", "coffee_shop"),
     "hotel": ("hotel", "lodging", "private_lodging"),
-    "construction": ("building_or_construction_service", "home_service"),
-    "manufacturer": ("manufacturer", "industrial_facility_or_service"),
+    "construction": (
+        "building_or_construction_service", "home_service", "contractor",
+        "hvac_service", "roofing", "paving_contractor", "flooring_contractor",
+    ),
+    "pest_control": ("pest_control_service",),
+    "manufacturer": (
+        "manufacturer", "industrial_equipment_manufacturer",
+        "b2b_industrial_and_machine_service", "industrial_facility_or_service",
+    ),
+    "guest_house": (
+        "bed_and_breakfast", "guest_house", "private_lodging",
+        "vacation_rental", "lodge",
+    ),
     "beauty": ("beauty_salon", "beauty"),
     "hairdresser": ("hair_salon", "hairdresser"),
     "barber": ("barber_shop", "hair_salon"),

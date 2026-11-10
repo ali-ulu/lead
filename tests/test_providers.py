@@ -88,6 +88,16 @@ class ProviderTests(unittest.TestCase):
         message = build_message({'name':'Example','website':None,'website_status':'missing'}, 'sd')
         self.assertIn('السلام عليڪم', message)
 
+    def test_target_sectors_are_discoverable(self):
+        from lead_hunter.providers.osm import CATEGORY_FILTERS
+        from lead_hunter.providers.overture import CATEGORY_ALIASES
+        from lead_hunter.normalize import category_key
+        for key in ("construction", "pest_control", "manufacturer", "guest_house"):
+            self.assertIn(key, CATEGORY_FILTERS)
+            self.assertIn(key, CATEGORY_ALIASES)
+        self.assertEqual(category_key("mantolama"), "construction")
+        self.assertEqual(category_key("pansiyon"), "guest_house")
+
 
 if __name__ == '__main__':
     unittest.main()

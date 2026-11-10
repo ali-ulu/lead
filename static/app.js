@@ -25,7 +25,9 @@ const categoryLabels = {
   restaurant:"Restaurant",cafe:"Cafe",hotel:"Hotel",beauty:"Beauty Salon",hairdresser:"Hairdresser",barber:"Barber",spa:"Spa",
   real_estate:"Real Estate",accountant:"Accountant",lawyer:"Lawyer",insurance:"Insurance",travel_agency:"Travel Agency",
   car_repair:"Car Repair",car_dealer:"Car Dealer",electrician:"Electrician",plumber:"Plumber",photographer:"Photographer",
-  architect:"Architect",gym:"Gym",bakery:"Bakery",florist:"Florist"
+  architect:"Architect",gym:"Gym",bakery:"Bakery",florist:"Florist",
+  construction:"Home & Building Services",pest_control:"Pest Control",
+  manufacturer:"Manufacturer",guest_house:"Guest House / Pension"
 };
 
 function tr(key){ return (T[lang] && T[lang][key]) || T.en[key] || key; }

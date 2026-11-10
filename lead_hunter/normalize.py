@@ -185,6 +185,14 @@ CATEGORY_ALIASES: dict[str, tuple[str, ...]] = {
     "accountant": ("accountant", "muhasebe", "mali müşavir"),
     "real_estate": ("real_estate", "emlak", "gayrimenkul"),
     "car_repair": ("car_repair", "oto tamir", "tamirci", "servis"),
+    "construction": (
+        "construction", "home_services", "tadilat", "dekorasyon", "mantolama",
+        "çatı", "cati", "izolasyon", "klima", "kombi", "inşaat", "insaat",
+        "müteahhit", "muteahhit",
+    ),
+    "pest_control": ("pest_control", "ilaçlama", "ilaclama", "haşere", "hasere"),
+    "manufacturer": ("manufacturer", "imalat", "fabrika", "üretim", "uretim", "sanayi"),
+    "guest_house": ("guest_house", "pansiyon", "butik otel", "villa", "apart"),
 }
 
 _ALIAS_TO_KEY: dict[str, str] = {}
