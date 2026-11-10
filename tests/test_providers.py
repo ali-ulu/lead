@@ -13,6 +13,19 @@ class ProviderTests(unittest.TestCase):
         self.assertIn('out tags center qt;', q)
         self.assertNotIn(' 250;', q)
 
+    def test_new_sector_categories_supported_by_both_providers(self):
+        from lead_hunter.providers.osm import _build_around_query
+        from lead_hunter.providers.overture import CATEGORY_ALIASES as OVERTURE
+
+        for category in ("construction", "manufacturer"):
+            q = _build_around_query(38.42, 27.13, 20000, category, 35)
+            self.assertTrue(q, category)
+            self.assertIn(category, OVERTURE)
+
+    def test_hotel_alias_covers_private_lodging(self):
+        from lead_hunter.providers.overture import CATEGORY_ALIASES as OVERTURE
+        self.assertIn("private_lodging", OVERTURE["hotel"])
+
     def test_normalize_unlimited_mode(self):
         elements = [
             {"type": "node", "id": i, "lat": 1.0, "lon": 2.0, "tags": {"name": f"Business {i}"}}

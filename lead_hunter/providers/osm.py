@@ -44,6 +44,8 @@ CATEGORY_FILTERS: dict[str, list[tuple[str, str]]] = {
     "gym": [("leisure", "fitness_centre")],
     "bakery": [("shop", "bakery")],
     "florist": [("shop", "florist")],
+    "construction": [("craft", "builder"), ("craft", "plasterer"), ("craft", "painter"), ("craft", "insulation"), ("craft", "roofer"), ("craft", "hvac"), ("craft", "heating_engineer")],
+    "manufacturer": [("man_made", "works")],
 }
 
 SOCIAL_TAGS: dict[str, tuple[tuple[str, ...], str]] = {
