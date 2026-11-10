@@ -10,13 +10,14 @@ import unittest
 from unittest import mock
 
 import lead_hunter.audit as audit
+import lead_hunter.netguard as netguard
 
 
 class DeadDomainTests(unittest.TestCase):
     def test_unresolvable_host_is_reported_as_dead(self):
         import socket
 
-        with mock.patch.object(audit.socket, "getaddrinfo",
+        with mock.patch.object(netguard.socket, "getaddrinfo",
                                side_effect=socket.gaierror("Name or service not known")):
             result = audit.audit_url("http://retired-domain.example/")
 
@@ -30,7 +31,7 @@ class DeadDomainTests(unittest.TestCase):
         import socket
 
         infos = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 80))]
-        with mock.patch.object(audit.socket, "getaddrinfo", return_value=infos):
+        with mock.patch.object(netguard.socket, "getaddrinfo", return_value=infos):
             with self.assertRaises(ValueError) as ctx:
                 audit.audit_url("http://127.0.0.1/")
 

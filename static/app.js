@@ -69,6 +69,8 @@ async function loadLeads(){
 
 function webState(lead){
   if(lead.website_status==="missing") return [tr("noSite"),"missing"];
+  if(lead.website_status==="dead") return ["Dead","dead"];
+  if(lead.website_status==="blocked") return ["Robots-blocked","blocked"];
   if(lead.website_status==="weak") return [tr("weak"),"weak"];
   if(lead.website_status==="healthy") return ["Healthy","healthy"];
   return ["Not checked","unknown"];
@@ -153,19 +155,42 @@ function openDrawer(){ $("drawer").setAttribute("aria-hidden","false"); document
 function closeDrawer(){ $("drawer").setAttribute("aria-hidden","true"); document.body.style.overflow=""; currentLead=null; draftText=""; }
 async function openLead(id){ currentLead=await api("/api/leads/"+id); renderLead(currentLead); openDrawer(); }
 
+function confidenceLabel(confidence,key){
+  const level=(confidence||{})[key]||"";
+  if(level==="lighthouse")return "measured";
+  if(level==="composite")return "composite";
+  if(level==="verified_missing")return "verified";
+  if(level==="heuristic")return "heuristic";
+  return "";
+}
+
 function visibilityScoreHtml(lead){
+  const confidence=lead.score_confidence||{};
   const values=[
-    ["SEO",lead.seo_score],
-    ["AEO",lead.aeo_score],
-    ["GEO",lead.geo_score],
-    ["AIO",lead.ai_visibility_score],
-    ["GAP",lead.opportunity_gap_score],
+    ["SEO",lead.seo_score,"seo"],
+    ["AEO",lead.aeo_score,"aeo"],
+    ["GEO",lead.geo_score,"geo"],
+    ["AIO",lead.ai_visibility_score,"ai_visibility"],
+    ["GAP",lead.opportunity_gap_score,"opportunity_gap"],
   ];
-  return '<div class="visibility-grid">'+values.map(([label,value])=>{
+  return '<div class="visibility-grid">'+values.map(([label,value,key])=>{
     const shown=(value===null||value===undefined)?"—":String(value);
     const cls=value===null||value===undefined?"na":(label==="GAP"?(value>=70?"hot":value>=45?"mid":"good"):(value>=70?"good":value>=45?"mid":"hot"));
-    return '<div class="visibility-card '+cls+'"><span>'+label+'</span><strong>'+shown+'</strong><small>/100</small></div>';
+    const note=confidenceLabel(confidence,key);
+    const pct=(label==="AIO"&&lead.ai_visibility_score_percentile!==null&&lead.ai_visibility_score_percentile!==undefined)?'<small class="confidence">top '+(100-lead.ai_visibility_score_percentile)+'% here</small>':(note?'<small class="confidence">'+esc(note)+'</small>':"");
+    return '<div class="visibility-card '+cls+'"><span>'+label+'</span><strong>'+shown+'</strong><small>/100</small>'+pct+'</div>';
   }).join("")+'</div>';
+}
+
+function aiPresenceHtml(lead){
+  const presence=lead.ai_presence||{};
+  if(!presence||typeof presence!=="object"||!Object.keys(presence).length)return '<p class="muted">AI presence not measured yet.</p>';
+  if(!presence.measured){
+    return '<p class="muted">AI presence: '+esc(presence.reason||"not measured")+'</p>';
+  }
+  const rate=Math.round((presence.mention_rate||0)*100);
+  const rank=presence.best_rank?("best rank "+presence.best_rank):"not cited";
+  return '<p class="muted">Measured: cited in '+presence.cited_count+'/'+presence.queries+' answer queries ('+rate+'%), '+esc(rank)+'.</p>';
 }
 
 function visibilityReasonsHtml(lead){
@@ -211,8 +236,9 @@ function showTab(tab){
     $("dnc").addEventListener("click",()=>doNotContact(lead.id));
   }
   if(tab==="audit"){
-    n.innerHTML='<div class="tab-panel"><div class="audit-card"><strong>'+esc(lead.website||"No website")+'</strong><p class="muted">Lighthouse + structured content signals feed SEO, AEO, GEO and AI Visibility readiness.</p>'+(lead.website?'<button id="auditBtn" class="secondary-btn">'+esc(tr("audit"))+'</button>':"")+'<div id="auditResult"></div></div><div class="detail-section" style="margin-top:16px"><h4>VISIBILITY SCORECARD</h4>'+visibilityScoreHtml(lead)+visibilityReasonsHtml(lead)+'</div></div>';
+    n.innerHTML='<div class="tab-panel"><div class="audit-card"><strong>'+esc(lead.website||"No website")+'</strong><p class="muted">Lighthouse + structured content signals feed SEO, AEO, GEO and AI Visibility readiness.</p>'+(lead.website?'<button id="auditBtn" class="secondary-btn">'+esc(tr("audit"))+'</button>':"")+'<div id="auditResult"></div></div><div class="detail-section" style="margin-top:16px"><h4>VISIBILITY SCORECARD</h4>'+visibilityScoreHtml(lead)+visibilityReasonsHtml(lead)+'</div><div class="detail-section" style="margin-top:16px"><h4>AI ANSWER PRESENCE</h4>'+aiPresenceHtml(lead)+'<button id="aiPresenceBtn" class="secondary-btn" style="margin-top:8px">Measure AI presence</button><div id="aiPresenceResult"></div></div></div>';
     if($("auditBtn"))$("auditBtn").addEventListener("click",()=>auditLead(lead.id));
+    if($("aiPresenceBtn"))$("aiPresenceBtn").addEventListener("click",()=>measureAiPresence(lead.id));
   }
   if(tab==="message"){
     n.innerHTML='<div class="tab-panel"><div class="lang-row">'+["en","tr","ur","sd"].map(x=>'<button class="lang-btn" data-lang="'+x+'">'+x.toUpperCase()+'</button>').join("")+'</div><div id="message" class="message-box">Choose language</div><div class="message-actions"><button id="copyMessage" class="secondary-btn" disabled>'+esc(tr("copy"))+'</button></div>'+
@@ -250,6 +276,15 @@ async function verifyLead(id){try{const d=await api("/api/v1/leads/"+id+"/verify
 async function enrichLead(id){try{await api("/api/v1/leads/"+id+"/enrich",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});await refreshCurrent("overview");toast("Enriched");}catch(e){toast(e.message,true);}}
 async function enrichReputation(id){try{const d=await api("/api/v1/leads/"+id+"/reputation",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});currentLead=d.lead||currentLead;await refreshCurrent("overview");const r=d.reputation||{};toast(r.matched?("Rating "+String(r.rating??"—")+" · "+String(r.review_count??0)+" reviews"):(r.reason||"No reputation match"));}catch(e){toast(e.message,true);}}
 async function auditLead(id){try{const d=await api("/api/v1/leads/"+id+"/audit",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});currentLead=d.lead;renderLead(currentLead);document.querySelector('[data-tab="audit"]').click();const n=$("auditResult");if(n)n.innerHTML='<p>'+esc(d.audit.audit_engine||"heuristic")+' · perf '+esc(d.audit.performance_score??"—")+' · SEO '+esc(d.audit.seo_score??"—")+' · AEO '+esc(d.audit.aeo_score??"—")+' · GEO '+esc(d.audit.geo_score??"—")+' · AIO '+esc(d.audit.ai_visibility_score??"—")+'</p>';await loadLeads();}catch(e){toast(e.message,true);}}
+
+async function measureAiPresence(id){
+  const btn=$("aiPresenceBtn");
+  if(btn){btn.disabled=true;btn.textContent="Measuring...";}
+  try{
+    const d=await api("/api/v1/leads/"+id+"/ai-presence",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+    currentLead=d.lead;renderLead(currentLead);document.querySelector('[data-tab="audit"]').click();
+  }catch(e){toast(e.message,true);}
+}
 async function setStage(id,status){try{const d=await api("/api/v1/leads/"+id+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status})});currentLead=d.lead;await refreshCurrent("overview");}catch(e){toast(e.message,true);}}
 async function doNotContact(id){if(!confirm("Mark do-not-contact?"))return;try{await api("/api/v1/leads/"+id+"/dnc",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});closeDrawer();await loadLeads();}catch(e){toast(e.message,true);}}
 async function draft(id,l){try{const d=await api("/api/v1/leads/"+id+"/message?lang="+encodeURIComponent(l));draftText=d.message||"";$("message").textContent=draftText;$("message").dir=(l==="ur"||l==="sd")?"rtl":"ltr";$("copyMessage").disabled=!draftText;}catch(e){toast(e.message,true);}}

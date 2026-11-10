@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlparse
 
 from lead_hunter.agent import get_job, run_sales_job
 from lead_hunter.crm import add_note, list_activities, mark_stale_no_response, set_engagement, set_follow_up
-from lead_hunter.db import clear_all, delete_lead, get_lead, get_search_run, initialize, list_leads, purge_stale_leads
+from lead_hunter.db import clear_all, delete_lead, get_lead, get_search_run, initialize, purge_stale_leads
 from lead_hunter.doctor import run_checks
 from lead_hunter.exporters import csv_bytes, xlsx_bytes
 from lead_hunter.oauth_meta import (
@@ -25,8 +25,9 @@ from lead_hunter.oauth_meta import (
 )
 from lead_hunter.providers.osm import CATEGORY_FILTERS
 from lead_hunter.services import (
-    audit_lead, discover_businesses, draft_outreach, enrich_lead, enrich_reputation,
-    mark_do_not_contact, set_pipeline_stage, verify_lead,
+    annotate_lead_relative, audit_lead, discover_businesses, draft_outreach, enrich_lead,
+    enrich_reputation, list_leads_relative, mark_do_not_contact,
+    measure_ai_presence_for_lead, set_pipeline_stage, verify_lead,
 )
 
 ROOT = Path(__file__).resolve().parent
@@ -187,11 +188,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8")
             self.send_header("Content-Length",str(len(spec))); self.end_headers(); self.wfile.write(spec); return
         if path in {"/api/leads","/api/v1/leads"}:
-            return self._json({"items":list_leads(self._query(parsed))})
+            return self._json({"items":list_leads_relative(self._query(parsed))})
         if path in {"/api/export.csv","/api/v1/export.csv"}:
-            return self._bytes(csv_bytes(list_leads(self._query(parsed))),"text/csv; charset=utf-8","leadscout-leads.csv")
+            return self._bytes(csv_bytes(list_leads_relative(self._query(parsed))),"text/csv; charset=utf-8","leadscout-leads.csv")
         if path in {"/api/export.xlsx","/api/v1/export.xlsx"}:
-            return self._bytes(xlsx_bytes(list_leads(self._query(parsed))),
+            return self._bytes(xlsx_bytes(list_leads_relative(self._query(parsed))),
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","leadscout-leads.xlsx")
         if path=="/api/message":
             q=parse_qs(parsed.query)
@@ -254,7 +255,7 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/leads/") or path.startswith("/api/v1/leads/"):
             try: lead_id=self._lead_id(path)
             except ValueError: return self._json({"error":"invalid id"},400)
-            lead=get_lead(lead_id)
+            lead=annotate_lead_relative(get_lead(lead_id))
             return self._json(lead or {"error":"not found"},200 if lead else 404)
 
         return self._serve_static(path)
@@ -318,7 +319,7 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as exc: return self._json({"error":str(exc)},400)
             except Exception as exc: return self._json({"error":str(exc)},502)
 
-        for suffix,func in (("/audit",audit_lead),("/enrich",enrich_lead),("/verify",verify_lead),("/reputation",enrich_reputation)):
+        for suffix,func in (("/audit",audit_lead),("/enrich",enrich_lead),("/verify",verify_lead),("/reputation",enrich_reputation),("/ai-presence",measure_ai_presence_for_lead)):
             if (path.startswith("/api/leads/") or path.startswith("/api/v1/leads/")) and path.endswith(suffix):
                 try: return self._json(func(self._lead_id(path,suffix)))
                 except ValueError as exc: return self._json({"error":str(exc)},400)

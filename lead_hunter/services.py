@@ -7,7 +7,13 @@ from .crm import add_activity
 from .db import get_lead, list_leads, record_search_run, update_lead, upsert_leads
 from .enrichment import enrich_website
 from .intelligence import calculate_intelligence
-from .visibility import calculate_visibility, missing_website_visibility
+from .visibility import (
+    add_relative_scores,
+    calculate_visibility,
+    missing_website_visibility,
+    percentile_rank,
+)
+from . import ai_presence
 from .merge import merge_leads
 from . import normalize
 from .outreach import build_message
@@ -122,6 +128,7 @@ def _update_intelligence(lead_id: int, lead: dict[str,Any]) -> dict[str,Any]:
             "geo_score":visibility.get("geo_score"),
             "ai_visibility_score":visibility.get("ai_visibility_score"),
             "opportunity_gap_score":visibility.get("opportunity_gap_score"),
+            "score_confidence":visibility.get("score_confidence") or {},
             "visibility_reasons":visibility.get("visibility_reasons") or {},
             "visibility_signals":visibility.get("visibility_signals") or signals,
         })
@@ -310,6 +317,8 @@ def audit_lead(lead_id: int, enrich: bool=True) -> dict[str,Any]:
         "aeo_score":result.get("aeo_score"),"geo_score":result.get("geo_score"),
         "ai_visibility_score":result.get("ai_visibility_score"),
         "opportunity_gap_score":result.get("opportunity_gap_score"),
+        "score_confidence":result.get("score_confidence") or {},
+        "response_ms":result.get("response_ms"),"ttfb_ms":result.get("ttfb_ms"),
         "visibility_reasons":result.get("visibility_reasons") or {},
         "visibility_signals":result.get("visibility_signals") or {},
         "accessibility_score":result.get("accessibility_score"),"mobile_ok":result.get("mobile_ok"),
@@ -326,7 +335,26 @@ def audit_lead(lead_id: int, enrich: bool=True) -> dict[str,Any]:
             enrichment={"complete":False,"error":str(exc)}
     updated=_update_intelligence(int(lead_id),updated)
     add_activity(int(lead_id),kind="audit",status=updated.get("website_status") or "",metadata={"engine":result.get("audit_engine","heuristic")})
-    return {"lead":updated,"audit":result,"enrichment":enrichment}
+    return {"lead":annotate_lead_relative(updated),"audit":result,"enrichment":enrichment}
+
+def measure_ai_presence_for_lead(lead_id: int) -> dict[str,Any]:
+    """Measure whether the business appears in answer-style search results.
+
+    Separate from the heuristic AI Visibility score on purpose: this spends
+    search-provider quota and returns evidence, not a readiness number.
+    """
+    lead=get_lead(int(lead_id))
+    if not lead: raise LookupError("Lead not found.")
+    presence=ai_presence.measure_ai_presence(
+        name=lead.get("name") or "",
+        category=lead.get("category") or "",
+        city=lead.get("city") or "",
+        country=lead.get("country") or "",
+        website=lead.get("website") or "",
+    )
+    updated=update_lead(int(lead_id),{"ai_presence":presence}) or lead
+    add_activity(int(lead_id),kind="ai_presence",status="measured" if presence.get("measured") else "unavailable",metadata=presence)
+    return {"lead":annotate_lead_relative(updated),"ai_presence":presence}
 
 def draft_outreach(lead_id: int, lang: str="en") -> dict[str,Any]:
     lead=get_lead(int(lead_id))
@@ -383,4 +411,39 @@ def query_leads(
         if value: filters[key]=str(int(value))
     if has_social: filters["has_social"]="1"
     if contactable: filters["contactable"]="1"
-    return list_leads(filters)
+    rows=list_leads(filters)
+    # Annotate market-relative position so a report can say "top 20% here"
+    # without the caller re-fetching the whole sample.
+    return add_relative_scores(rows, field="ai_visibility_score")
+
+
+def list_leads_relative(filters: dict[str, str]) -> list[dict[str, Any]]:
+    """``db.list_leads`` plus the market-relative AI Visibility percentile.
+
+    The HTTP list/export endpoints use this so the percentile the UI and the
+    spreadsheet column expect is actually present, not only on ``query_leads``.
+    """
+    return add_relative_scores(list_leads(filters), field="ai_visibility_score")
+
+
+def annotate_lead_relative(lead: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Add the AI Visibility percentile for a single lead's own market.
+
+    A single-lead read (drawer open, audit result) has no caller-supplied
+    sample, so the peer group is that lead's city/category population. Missing
+    measurements stay null rather than being shown as a position.
+    """
+    if not lead:
+        return lead
+    field = "ai_visibility_score"
+    if lead.get(field) is None:
+        lead[f"{field}_percentile"] = None
+        return lead
+    filters = {
+        "city": lead.get("city") or "",
+        "category": lead.get("category") or "",
+        "country": lead.get("country") or "",
+    }
+    peers = [row.get(field) for row in list_leads({k: v for k, v in filters.items() if v})]
+    lead[f"{field}_percentile"] = percentile_rank(lead.get(field), peers)
+    return lead

@@ -3,5 +3,6 @@ __pycache__/
 .venv/
 .env
 data/*.db
+*.egg-info/
 .DS_Store
 coverage/

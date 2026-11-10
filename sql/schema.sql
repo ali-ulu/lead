@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS leads (
     opportunity_gap_score INTEGER,
     visibility_reasons TEXT NOT NULL DEFAULT '{}',
     visibility_signals TEXT NOT NULL DEFAULT '{}',
+    score_confidence TEXT NOT NULL DEFAULT '{}',
+    ai_presence TEXT NOT NULL DEFAULT '{}',
+    response_ms INTEGER,
+    ttfb_ms INTEGER,
     accessibility_score INTEGER,
     mobile_ok INTEGER,
     has_cta INTEGER,
@@ -71,6 +75,10 @@ CREATE TABLE IF NOT EXISTS search_runs (
 CREATE TABLE IF NOT EXISTS search_run_leads (
     search_id TEXT NOT NULL,
     lead_id INTEGER NOT NULL,
+    website_status TEXT,
+    lead_score INTEGER,
+    ai_visibility_score INTEGER,
+    opportunity_gap_score INTEGER,
     PRIMARY KEY(search_id, lead_id)
 );
 CREATE INDEX IF NOT EXISTS idx_search_run_leads_search ON search_run_leads(search_id);

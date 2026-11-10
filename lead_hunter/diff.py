@@ -83,6 +83,25 @@ def compare_runs(
         if _is_high_opportunity(merged, min_score=min_score):
             alerts.append(lead)
 
+    # Visibility movement across runs: the whole point of outreach is that a
+    # weak site gets better (or a missing one appears), so report the score
+    # delta for leads measured in both runs instead of only new/gone counts.
+    improved = []
+    regressed = []
+    for lead_id in common_ids:
+        before = (previous_snap.get(lead_id) or {}).get("ai_visibility_score")
+        after = (current_snap.get(lead_id) or {}).get("ai_visibility_score")
+        if before is None or after is None:
+            continue
+        delta = int(after) - int(before)
+        if delta <= 0:
+            if delta < 0:
+                regressed.append({**_brief(current.get(lead_id, {})), "ai_visibility_before": before, "ai_visibility_after": after, "delta": delta})
+            continue
+        improved.append({**_brief(current.get(lead_id, {})), "ai_visibility_before": before, "ai_visibility_after": after, "delta": delta})
+    improved.sort(key=lambda x: x["delta"], reverse=True)
+    regressed.sort(key=lambda x: x["delta"])
+
     report = {
         "previous_search_id": previous_search_id,
         "current_search_id": current_search_id,
@@ -93,11 +112,15 @@ def compare_runs(
         "website_gained_count": len(website_gained),
         "website_lost_count": len(website_lost),
         "alert_count": len(alerts),
+        "visibility_improved_count": len(improved),
+        "visibility_regressed_count": len(regressed),
         "new": [_brief(current[i]) for i in sorted(new_ids) if i in current],
         "gone": [_brief(previous[i]) for i in sorted(gone_ids) if i in previous],
         "website_gained": [_brief(x) for x in website_gained],
         "website_lost": [_brief(x) for x in website_lost],
         "alerts": [_brief(x) for x in alerts],
+        "visibility_improved": improved,
+        "visibility_regressed": regressed,
     }
     return report
 
@@ -109,6 +132,7 @@ def format_report(report: dict[str, Any]) -> str:
         f"  new: {report['new_count']}  gone: {report['gone_count']}",
         f"  websites gained: {report['website_gained_count']}  lost: {report['website_lost_count']}",
         f"  high-opportunity alerts: {report['alert_count']}",
+        f"  visibility improved: {report.get('visibility_improved_count', 0)}  regressed: {report.get('visibility_regressed_count', 0)}",
     ]
     for label, key in (
         ("New businesses", "new"),
@@ -116,13 +140,17 @@ def format_report(report: dict[str, Any]) -> str:
         ("Websites gained", "website_gained"),
         ("Websites lost", "website_lost"),
         ("High-opportunity alerts", "alerts"),
+        ("Visibility improved", "visibility_improved"),
+        ("Visibility regressed", "visibility_regressed"),
     ):
         items = report.get(key) or []
         if not items:
             continue
         lines.append(f"  {label}:")
         for item in items[:20]:
-            lines.append(f"    - {item['name']} ({item['category']}, {item['city']}) score={item['lead_score']}")
+            delta = item.get("delta")
+            suffix = f" (AIO {item['ai_visibility_before']}->{item['ai_visibility_after']}, {delta:+d})" if delta is not None else ""
+            lines.append(f"    - {item['name']} ({item['category']}, {item['city']}) score={item['lead_score']}{suffix}")
         if len(items) > 20:
             lines.append(f"    ... and {len(items) - 20} more")
     return "\n".join(lines)

@@ -398,6 +398,8 @@ a{color:inherit}
 .website-pill.missing{border-color:#e7b9bf;background:#fff5f6;color:var(--red)}
 .website-pill.weak{border-color:#ead1a7;background:#fff9ed;color:var(--amber)}
 .website-pill.healthy{border-color:#b8d9c6;background:#f2fbf5;color:var(--green)}
+.website-pill.dead{border-color:#e7b9bf;background:#fff5f6;color:var(--red)}
+.website-pill.blocked{border-color:#d5d9de;background:#f6f7f8;color:#5c6268}
 .website-pill.unknown{color:#7f858b}
 .contact-set{display:flex;gap:5px;flex-wrap:wrap}
 .contact-pill{
@@ -613,6 +615,7 @@ html[dir="rtl"] .drawer-panel{
 .visibility-card.mid{border-color:#ead1a7;background:#fffaf0}.visibility-card.mid strong{color:var(--amber)}
 .visibility-card.hot{border-color:#e5b5bc;background:#fff5f6}.visibility-card.hot strong{color:var(--red)}
 .visibility-card.na strong{color:#a6abb0}
+.visibility-card .confidence{display:block;margin-top:4px;font-size:7px;letter-spacing:.06em;text-transform:uppercase;color:#8a9096}
 .visibility-note{font-size:9px;margin:7px 1px 0}
 .visibility-reason-group{margin-top:16px}
 .visibility-reason-group h5{margin:0 0 5px;color:#6f757b;font-size:10px}
