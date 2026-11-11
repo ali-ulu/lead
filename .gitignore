@@ -6,3 +6,6 @@ data/*.db
 *.egg-info/
 .DS_Store
 coverage/
+
+# OpenHands agent memory (kept out of the repo)
+.openhands/
