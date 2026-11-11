@@ -18,6 +18,7 @@ from .merge import merge_leads
 from . import normalize
 from .outreach import build_message
 from .providers.nominatim import geocode_area
+from .providers.photon import geocode_area as photon_geocode_area
 from .providers.osm import CATEGORY_FILTERS, _radius_bbox, search_around_detailed
 from .providers.overture import search_bbox as search_overture_bbox
 from .providers.web_search import verify_business_web
@@ -40,6 +41,23 @@ def _intelligent(rows: list[dict[str,Any]]) -> list[dict[str,Any]]:
         lead["intelligence_reasons"]=reasons
     return rows
 
+def _geocode_area_with_fallback(city: str, country: str) -> tuple[dict[str,Any], list[str]]:
+    """Resolve a city to a bounding box, falling back to Photon.
+
+    Nominatim is the primary geocoder but is rate-limited and occasionally
+    unavailable. Photon is OSM-backed and keyless, so it keeps discovery
+    working when Nominatim fails. A hard failure from both propagates.
+    """
+    try:
+        return geocode_area(city, country), []
+    except Exception as primary_exc:
+        try:
+            area = photon_geocode_area(city, country)
+        except Exception:
+            raise primary_exc
+        return area, [f"Nominatim geocoding failed ({primary_exc}); used Photon fallback."]
+
+
 def discover_businesses(
     *, city: str, category: str, country: str="", radius_km: int=20,
     max_results: int | None=None, providers: list[str] | None=None,
@@ -54,9 +72,9 @@ def discover_businesses(
 
     wanted=set(providers or ["osm","overture"])
     unknown=sorted(wanted-{"osm","overture"})
-    area=geocode_area(city,country)
+    area, geocode_warnings = _geocode_area_with_fallback(city, country)
     provider_rows: list[list[dict[str,Any]]] = []
-    summary: dict[str,Any]={}; warnings=[]; partial=False
+    summary: dict[str,Any]={}; warnings=list(geocode_warnings); partial=False
     provider_errors: dict[str,str]={}
 
     if "osm" in wanted:

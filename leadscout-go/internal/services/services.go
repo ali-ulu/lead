@@ -20,6 +20,7 @@ import (
 	"github.com/ali-ulu/lead/leadscout-go/internal/providers/googleplaces"
 	"github.com/ali-ulu/lead/leadscout-go/internal/providers/nominatim"
 	"github.com/ali-ulu/lead/leadscout-go/internal/providers/osm"
+	"github.com/ali-ulu/lead/leadscout-go/internal/providers/photon"
 	"github.com/ali-ulu/lead/leadscout-go/internal/providers/websearch"
 	"github.com/ali-ulu/lead/leadscout-go/internal/visibility"
 )
@@ -83,6 +84,23 @@ type DiscoverResult struct {
 	Warnings       []string          `json:"warnings"`
 }
 
+// geocodeAreaWithFallback resolves a city, falling back to Photon.
+//
+// Nominatim is the primary geocoder but is rate-limited and occasionally
+// unavailable. Photon is OSM-backed and keyless, so it keeps discovery
+// working when Nominatim fails. A hard failure from both is returned.
+func geocodeAreaWithFallback(city, country string) (*model.Area, []string, error) {
+	area, err := nominatim.GeocodeArea(city, country, 20*time.Second)
+	if err == nil {
+		return area, nil, nil
+	}
+	fallback, photonErr := photon.GeocodeArea(city, country, 20*time.Second)
+	if photonErr != nil {
+		return nil, nil, err
+	}
+	return fallback, []string{fmt.Sprintf("Nominatim geocoding failed (%v); used Photon fallback.", err)}, nil
+}
+
 // DiscoverBusinesses runs multi-source discovery, dedupe, scoring and storage.
 func DiscoverBusinesses(city, category, country string, radiusKM int, maxResults *int, providers []string) (*DiscoverResult, error) {
 	if city == "" || category == "" {
@@ -117,14 +135,14 @@ func DiscoverBusinesses(city, category, country string, radiusKM int, maxResults
 		}
 	}
 
-	area, err := nominatim.GeocodeArea(city, country, 20*time.Second)
+	area, geocodeWarnings, err := geocodeAreaWithFallback(city, country)
 	if err != nil {
 		return nil, err
 	}
 
 	var providerRows [][]*model.Lead
 	summary := map[string]any{}
-	var warnings []string
+	warnings := append([]string{}, geocodeWarnings...)
 	partial := false
 	providerErrors := map[string]string{}
 

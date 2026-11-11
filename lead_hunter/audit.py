@@ -33,6 +33,23 @@ SOCIAL_HOSTS = {
     "whatsapp": ("wa.me", "api.whatsapp.com", "whatsapp.com"),
 }
 
+# Ad/tracking and analytics markers. A business that runs these has some
+# marketing maturity, which is a useful qualifier when prospecting: an
+# established advertiser is a different sales conversation from a business
+# that has never touched a pixel. Matched against script sources and inline
+# script bodies.
+TRACKING_MARKERS = {
+    "google_analytics": ("googletagmanager.com", "google-analytics.com", "gtag(", "ga('", 'ga("'),
+    "google_ads": ("googleadservices", "google_conversion", "googleads", "doubleclick.net"),
+    "meta_pixel": ("connect.facebook.net", "fbq(", "fbevents.js"),
+    "hotjar": ("hotjar", "hj("),
+    "matomo": ("matomo.", "piwik.", "_paq"),
+    "linkedin_insight": ("snap.licdn.com", "linkedin insight"),
+    "tiktok_pixel": ("analytics.tiktok.com", "ttq."),
+    "clarity": ("clarity.ms",),
+    "yandex_metrica": ("mc.yandex", "ym("),
+}
+
 # Placeholder for the rendered-evidence hook. A headless renderer (for example
 # a Lighthouse report that already contains the rendered DOM) can register a
 # callable here to supply the HTML a JS-heavy site actually serves. The default
@@ -72,6 +89,10 @@ class SignalParser(HTMLParser):
         self.text_parts: list[str] = []
         self.jsonld_blocks: list[str] = []
         self.time_values: list[str] = []
+        self.script_srcs: list[str] = []
+        self.inline_scripts: list[str] = []
+        self._in_script = False
+        self._script_buffer: list[str] = []
         self._jsonld = False
         self._jsonld_buffer: list[str] = []
         self._heading_tag = ""
@@ -128,11 +149,18 @@ class SignalParser(HTMLParser):
             if "canonical" in rel and d.get("href"):
                 self.canonical = d.get("href", "").strip()
         if tag == "script":
-            if d.get("src"):
+            src = d.get("src", "").strip()
+            if src:
                 self.scripts += 1
+                self.script_srcs.append(src)
             if "application/ld+json" in d.get("type", "").lower():
                 self._jsonld = True
                 self._jsonld_buffer = []
+            else:
+                # Inline script bodies carry the pixel/analytics calls
+                # (``gtag(...)``, ``fbq(...)``) that never appear in a src URL.
+                self._in_script = True
+                self._script_buffer = []
         if tag == "img":
             self.images += 1
             if d.get("alt", "").strip():
@@ -146,6 +174,12 @@ class SignalParser(HTMLParser):
                 self.jsonld_blocks.append(block)
             self._jsonld = False
             self._jsonld_buffer = []
+        elif self._in_script and tag == "script":
+            body = "".join(self._script_buffer).strip()
+            if body:
+                self.inline_scripts.append(body)
+            self._in_script = False
+            self._script_buffer = []
         if self._heading_tag and tag == self._heading_tag:
             text = re.sub(r"\s+", " ", " ".join(self._heading_buffer)).strip()
             if text:
@@ -159,6 +193,9 @@ class SignalParser(HTMLParser):
             return
         if self._jsonld:
             self._jsonld_buffer.append(data)
+            return
+        if self._in_script:
+            self._script_buffer.append(data)
             return
         self.text_parts.append(text)
         if self._heading_tag:
@@ -180,6 +217,21 @@ def _walk_jsonld(value: Any, types: set[str], fields: set[str]) -> None:
     for child in value.values():
         if isinstance(child, (dict, list)):
             _walk_jsonld(child, types, fields)
+
+def detect_tracking(script_srcs: list[str], inline_scripts: list[str]) -> list[str]:
+    """Return the ad/analytics vendors detected on the page.
+
+    Matches the marker list against script sources and inline script bodies so
+    both a hosted tag manager and an inline ``gtag(...)`` call are found.
+    """
+    haystack = " ".join([*(script_srcs or []), *(inline_scripts or [])]).lower()
+    if not haystack:
+        return []
+    return sorted(
+        vendor for vendor, markers in TRACKING_MARKERS.items()
+        if any(marker in haystack for marker in markers)
+    )
+
 
 def _structured_data(blocks: list[str]) -> tuple[list[str], list[str]]:
     types: set[str] = set()
@@ -396,6 +448,7 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
             # server responsiveness rather than full-page download time.
             performance_score = _speed_proxy(ttfb_ms)
         schema_types, schema_fields = _structured_data(parser.jsonld_blocks)
+        tracking_vendors = detect_tracking(parser.script_srcs, parser.inline_scripts)
         business_schema = any(
             t == "LocalBusiness"
             or t.endswith("Business")
@@ -463,6 +516,7 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
             "semantic_main": parser.semantic_main,
             "social_count": len(parser.social_links),
             "contact_signal": parser.tel or parser.contact or parser.forms > 0,
+            "tracking_count": len(tracking_vendors),
             "ttfb_ms": ttfb_ms,
         }
         visibility = calculate_visibility(visibility_evidence, commercial_score=0)
@@ -508,6 +562,7 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
             "title": title,
             "latest_copyright_year": latest_year,
             "quality_flags": quality_flags,
+            "tracking_vendors": tracking_vendors,
             "social_links": parser.social_links,
             "website_status": "weak" if weak else "healthy",
             "note": "Lighthouse scores are used when a local Lighthouse binary is available; otherwise performance falls back to a TTFB proxy.",

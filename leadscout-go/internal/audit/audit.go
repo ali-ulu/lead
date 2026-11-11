@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -36,6 +37,40 @@ var SocialHosts = map[string][]string{
 }
 
 var auditLimiter = netguard.NewLimiter(netguard.DefaultAuditInterval())
+
+// TrackingMarkers maps an ad/analytics vendor to the strings that identify it.
+// A business that runs these has some marketing maturity, which is a useful
+// qualifier when prospecting. Matched against script sources and inline bodies.
+var TrackingMarkers = map[string][]string{
+	"google_analytics": {"googletagmanager.com", "google-analytics.com", "gtag(", "ga('", `ga("`},
+	"google_ads":       {"googleadservices", "google_conversion", "googleads", "doubleclick.net"},
+	"meta_pixel":       {"connect.facebook.net", "fbq(", "fbevents.js"},
+	"hotjar":           {"hotjar", "hj("},
+	"matomo":           {"matomo.", "piwik.", "_paq"},
+	"linkedin_insight": {"snap.licdn.com", "linkedin insight"},
+	"tiktok_pixel":     {"analytics.tiktok.com", "ttq."},
+	"clarity":          {"clarity.ms"},
+	"yandex_metrica":   {"mc.yandex", "ym("},
+}
+
+// DetectTracking returns the ad/analytics vendors detected on the page.
+func DetectTracking(scriptSrcs, inlineScripts []string) []string {
+	haystack := strings.ToLower(strings.Join(append(append([]string{}, scriptSrcs...), inlineScripts...), " "))
+	if strings.TrimSpace(haystack) == "" {
+		return nil
+	}
+	var found []string
+	for vendor, markers := range TrackingMarkers {
+		for _, marker := range markers {
+			if strings.Contains(haystack, marker) {
+				found = append(found, vendor)
+				break
+			}
+		}
+	}
+	sort.Strings(found)
+	return found
+}
 
 // NormalizeURL validates and returns an absolute http(s) URL.
 func NormalizeURL(raw string) (string, error) {
@@ -85,6 +120,8 @@ type signals struct {
 	textParts     []string
 	jsonLD        []string
 	timeValues    []string
+	scriptSrcs    []string
+	inlineScripts []string
 	images        int
 	altImages     int
 	socialLinks   map[string]string
@@ -178,6 +215,10 @@ func parseSignals(doc string) *signals {
 					s.canonical = strings.TrimSpace(attr(n, "href"))
 				}
 			case "script":
+				src := strings.TrimSpace(attr(n, "src"))
+				if src != "" {
+					s.scriptSrcs = append(s.scriptSrcs, src)
+				}
 				if strings.Contains(strings.ToLower(attr(n, "type")), "application/ld+json") {
 					var buf strings.Builder
 					for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -187,6 +228,18 @@ func parseSignals(doc string) *signals {
 					}
 					if block := strings.TrimSpace(buf.String()); block != "" {
 						s.jsonLD = append(s.jsonLD, block)
+					}
+				} else {
+					// Inline script bodies carry the pixel/analytics calls
+					// (gtag(...), fbq(...)) that never appear in a src URL.
+					var buf strings.Builder
+					for c := n.FirstChild; c != nil; c = c.NextSibling {
+						if c.Type == html.TextNode {
+							buf.WriteString(c.Data)
+						}
+					}
+					if body := strings.TrimSpace(buf.String()); body != "" {
+						s.inlineScripts = append(s.inlineScripts, body)
 					}
 				}
 			case "img":
@@ -211,6 +264,11 @@ func parseSignals(doc string) *signals {
 			if text := cleanText(n.Data); text != "" {
 				s.textParts = append(s.textParts, text)
 			}
+		}
+		// Script bodies are collected above (as JSON-LD or inline JS) and
+		// must not be counted as page text.
+		if n.Type == html.ElementNode && n.Data == "script" {
+			return
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			walk(c)
@@ -333,6 +391,7 @@ type Result struct {
 	Title               string              `json:"title,omitempty"`
 	LatestCopyrightYear *int                `json:"latest_copyright_year,omitempty"`
 	QualityFlags        []string            `json:"quality_flags,omitempty"`
+	TrackingVendors     []string            `json:"tracking_vendors,omitempty"`
 	SocialLinks         map[string]string   `json:"social_links"`
 	WebsiteStatus       string              `json:"website_status"`
 	Error               string              `json:"error,omitempty"`
@@ -530,6 +589,8 @@ func AuditURL(rawURL string, timeout time.Duration) (Result, error) {
 		freshSignal = false
 	}
 
+	trackingVendors := DetectTracking(s.scriptSrcs, s.inlineScripts)
+
 	evidence := visibility.Evidence{
 		Indexable:          !s.robotsNoindex && !headerNoindex,
 		RobotsNoindex:      s.robotsNoindex,
@@ -580,7 +641,7 @@ func AuditURL(rawURL string, timeout time.Duration) (Result, error) {
 		VisibilityReasons: vis.VisibilityReasons, VisibilitySignals: vis.VisibilitySignals,
 		AuditEngine: engine, Indexable: evidence.Indexable, MobileOK: s.viewport,
 		HasCTA: s.tel || s.contact || s.forms > 0, HasBooking: s.booking, Title: title,
-		LatestCopyrightYear: latestYear, QualityFlags: qualityFlags, SocialLinks: s.socialLinks,
+		LatestCopyrightYear: latestYear, QualityFlags: qualityFlags, TrackingVendors: trackingVendors, SocialLinks: s.socialLinks,
 		WebsiteStatus: "weak", Note: "Lighthouse scores are used when a local Lighthouse binary is available; otherwise performance falls back to a TTFB proxy.",
 	}
 	if !weak {
