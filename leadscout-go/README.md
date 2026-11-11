@@ -1,5 +1,7 @@
 # LeadScout 7.0 (Go)
 
+[![Go CI](https://github.com/ali-ulu/lead/actions/workflows/go-ci.yml/badge.svg)](https://github.com/ali-ulu/lead/actions/workflows/go-ci.yml)
+
 A provider-neutral, local-first rewrite of the Python LeadScout 7.0 sales
 opportunity system in Go. It preserves the original behavior: multi-source
 discovery, website verification, contact/reputation enrichment, deep website
@@ -35,8 +37,12 @@ with `LEADSCOUT_DB`.
 ## Tests
 
 ```bash
-go test ./...
+go test ./... -race
 ```
+
+CI (`.github/workflows/go-ci.yml`) runs `gofmt`, `go vet`, `go build`,
+`go test -race`, then a smoke job that builds the binary and exercises `-doctor`,
+the MCP server over stdio and streamable-HTTP, and the REST API.
 
 ## Layout
 
