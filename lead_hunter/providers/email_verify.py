@@ -15,6 +15,26 @@ from typing import Any
 
 EMAIL_RE = re.compile(r"^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$", re.I)
 
+# Retina/asset filenames such as "sprite@2x.png" or "icon@3x-480x358.jpg" look
+# like addresses to a naive regex because the asset extension reads as a TLD.
+# Reject any address whose final label is a known asset type.
+ASSET_EXTENSIONS = {
+    "png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp", "avif", "tiff",
+    "css", "js", "mjs", "json", "xml", "txt", "pdf", "map", "webmanifest",
+    "mp4", "webm", "mov", "avi", "mp3", "wav", "ogg",
+    "woff", "woff2", "ttf", "otf", "eot",
+    "zip", "gz", "tar", "rar", "7z",
+}
+
+
+def looks_like_email(address: str) -> bool:
+    """Filter a regex match that is really a filename, not an address."""
+    local, at, domain = (address or "").strip().lower().partition("@")
+    if not at or not local or "." not in domain:
+        return False
+    return domain.rsplit(".", 1)[-1] not in ASSET_EXTENSIONS
+
+
 DISPOSABLE_DOMAINS = {
     "mailinator.com", "guerrillamail.com", "10minutemail.com", "tempmail.com",
     "temp-mail.org", "throwawaymail.com", "yopmail.com", "trashmail.com",
@@ -51,7 +71,7 @@ def _mx_lookup(domain: str, timeout: float = 5.0) -> bool | None:
 def verify_email(email: str, *, check_mx: bool = True, timeout: float = 5.0) -> dict[str, Any]:
     """Score a single address. ``status`` is valid, risky or invalid."""
     address = (email or "").strip().lower()
-    if not EMAIL_RE.match(address):
+    if not EMAIL_RE.match(address) or not looks_like_email(address):
         return {
             "email": address, "valid_syntax": False, "status": "invalid",
             "score": 0, "reason": "Malformed address",

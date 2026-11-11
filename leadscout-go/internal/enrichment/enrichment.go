@@ -16,6 +16,7 @@ import (
 
 	"github.com/ali-ulu/lead/leadscout-go/internal/audit"
 	"github.com/ali-ulu/lead/leadscout-go/internal/netguard"
+	"github.com/ali-ulu/lead/leadscout-go/internal/providers/emailverify"
 )
 
 var emailRe = regexp.MustCompile(`(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b`)
@@ -114,6 +115,21 @@ func parsePage(base, doc string) *pageData {
 	return pd
 }
 
+// harvestEmails adds mailto links and inline matches to the set, dropping
+// filenames such as "sprite@2x.png" that the address regex also matches.
+func harvestEmails(doc string, mailtos []string, out map[string]bool) {
+	for _, e := range mailtos {
+		if emailverify.LooksLikeEmail(e) {
+			out[e] = true
+		}
+	}
+	for _, e := range emailRe.FindAllString(doc, -1) {
+		if emailverify.LooksLikeEmail(e) {
+			out[e] = true
+		}
+	}
+}
+
 func fetch(rawURL string, timeout time.Duration) (string, string, error) {
 	normalized, err := audit.NormalizeURL(rawURL)
 	if err != nil {
@@ -182,12 +198,7 @@ func EnrichWebsite(rawURL string, maxPages int) (Result, error) {
 		}
 		pages = append(pages, final)
 		pd := parsePage(final, doc)
-		for _, e := range pd.mailtos {
-			emails[e] = true
-		}
-		for _, e := range emailRe.FindAllString(doc, -1) {
-			emails[e] = true
-		}
+		harvestEmails(doc, pd.mailtos, emails)
 		for _, t := range pd.tels {
 			phones[t] = true
 		}
