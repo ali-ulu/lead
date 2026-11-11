@@ -1,0 +1,100 @@
+name: Go CI
+
+on:
+  push:
+    paths:
+      - "leadscout-go/**"
+      - "scripts/go_mcp_smoke.py"
+      - ".github/workflows/go-ci.yml"
+  pull_request:
+    paths:
+      - "leadscout-go/**"
+      - "scripts/go_mcp_smoke.py"
+      - ".github/workflows/go-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leadscout-go-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: leadscout-go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.4"
+          cache-dependency-path: leadscout-go/go.sum
+      - name: Verify formatting
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: Vet
+        run: go vet ./...
+      - name: Build
+        run: go build ./...
+      - name: Test
+        run: go test ./... -race
+
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.4"
+          cache-dependency-path: leadscout-go/go.sum
+      - name: Build binary
+        working-directory: leadscout-go
+        run: go build -o "$RUNNER_TEMP/leadscout" ./cmd/leadscout
+      - name: Doctor
+        run: |
+          # The Go build cannot bundle DuckDB, so -doctor always reports the
+          # Overture gap and exits non-zero. Assert that it is the ONLY problem,
+          # so any other regression still fails the job.
+          LEADSCOUT_ROOT="$GITHUB_WORKSPACE" LEADSCOUT_DB="$RUNNER_TEMP/doctor.db" \
+            "$RUNNER_TEMP/leadscout" -doctor -json > "$RUNNER_TEMP/doctor.json" || true
+          python3 -c "import json;d=json.load(open('$RUNNER_TEMP/doctor.json'));bad=[p for p in d['problems'] if 'Overture' not in p];assert not bad,'unexpected doctor problems: %s'%bad;assert d['providers']['osm']['ok'],'osm must be available';assert d['providers']['overture']['ok'] is False;print('doctor OK: only the known Overture gap')"
+      - name: MCP stdio smoke
+        run: python3 scripts/go_mcp_smoke.py "$RUNNER_TEMP/leadscout"
+      - name: MCP streamable-HTTP smoke
+        run: |
+          LEADSCOUT_ROOT="$GITHUB_WORKSPACE" LEADSCOUT_DB="$RUNNER_TEMP/http.db" \
+            "$RUNNER_TEMP/leadscout" -mcp -mcp-transport streamable-http -mcp-port 8790 \
+            >"$RUNNER_TEMP/mcp-http.log" 2>&1 &
+          MCP_PID=$!
+          trap 'kill $MCP_PID || true' EXIT
+          for _ in $(seq 1 20); do
+            if curl -sf -o /dev/null -X POST http://127.0.0.1:8790/mcp \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json, text/event-stream' \
+              -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'; then
+              echo "streamable-HTTP MCP responded"
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "streamable-HTTP MCP did not respond" >&2
+          cat "$RUNNER_TEMP/mcp-http.log" >&2
+          exit 1
+      - name: REST API smoke
+        run: |
+          LEADSCOUT_ROOT="$GITHUB_WORKSPACE" LEADSCOUT_DB="$RUNNER_TEMP/web.db" \
+            LEADSCOUT_PORT=8787 "$RUNNER_TEMP/leadscout" >"$RUNNER_TEMP/web.log" 2>&1 &
+          WEB_PID=$!
+          trap 'kill $WEB_PID || true' EXIT
+          for _ in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:8787/api/v1/health >/dev/null; then break; fi
+            sleep 0.5
+          done
+          curl -sf http://127.0.0.1:8787/api/v1/health | grep -q '"ok":true'
+          curl -sf http://127.0.0.1:8787/api/v1/categories >/dev/null
+          curl -sf -o /dev/null http://127.0.0.1:8787/index.html
+          echo "REST API and static UI responded"
