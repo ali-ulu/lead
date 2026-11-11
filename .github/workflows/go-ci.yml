@@ -56,8 +56,12 @@ jobs:
         run: go build -o "$RUNNER_TEMP/leadscout" ./cmd/leadscout
       - name: Doctor
         run: |
+          # The Go build cannot bundle DuckDB, so -doctor always reports the
+          # Overture gap and exits non-zero. Assert that it is the ONLY problem,
+          # so any other regression still fails the job.
           LEADSCOUT_ROOT="$GITHUB_WORKSPACE" LEADSCOUT_DB="$RUNNER_TEMP/doctor.db" \
-            "$RUNNER_TEMP/leadscout" -doctor
+            "$RUNNER_TEMP/leadscout" -doctor -json > "$RUNNER_TEMP/doctor.json" || true
+          python3 -c "import json;d=json.load(open('$RUNNER_TEMP/doctor.json'));bad=[p for p in d['problems'] if 'Overture' not in p];assert not bad,'unexpected doctor problems: %s'%bad;assert d['providers']['osm']['ok'],'osm must be available';assert d['providers']['overture']['ok'] is False;print('doctor OK: only the known Overture gap')"
       - name: MCP stdio smoke
         run: python3 scripts/go_mcp_smoke.py "$RUNNER_TEMP/leadscout"
       - name: MCP streamable-HTTP smoke
