@@ -384,6 +384,7 @@ type Result struct {
 	VisibilityReasons   map[string][]string `json:"visibility_reasons,omitempty"`
 	VisibilitySignals   map[string]any      `json:"visibility_signals,omitempty"`
 	AuditEngine         string              `json:"audit_engine,omitempty"`
+	FieldData           map[string]any      `json:"field_data,omitempty"`
 	Indexable           bool                `json:"indexable"`
 	MobileOK            bool                `json:"mobile_ok"`
 	HasCTA              bool                `json:"has_cta"`
@@ -451,6 +452,14 @@ func AuditURL(rawURL string, timeout time.Duration) (Result, error) {
 	}
 
 	lighthouse := runLighthouse(final)
+	// No local Chrome/Lighthouse: try the PageSpeed Insights API, which runs the
+	// same audit remotely and adds CrUX field data.
+	var fieldData map[string]any
+	usedPageSpeed := false
+	if lighthouse == nil {
+		lighthouse, fieldData = runPageSpeed(final)
+		usedPageSpeed = lighthouse != nil
+	}
 	effective := body
 	if lighthouse != nil && lighthouse.RenderedHTML != "" && len(lighthouse.RenderedHTML) > len(body) {
 		effective = lighthouse.RenderedHTML
@@ -630,6 +639,9 @@ func AuditURL(rawURL string, timeout time.Duration) (Result, error) {
 	engine := "visibility+heuristic"
 	if lighthouse != nil {
 		engine = "lighthouse+visibility+heuristic"
+		if usedPageSpeed {
+			engine = "pagespeed+visibility+heuristic"
+		}
 	}
 	result := Result{
 		Reachable: true, Status: resp.StatusCode, FinalURL: final,
@@ -639,10 +651,10 @@ func AuditURL(rawURL string, timeout time.Duration) (Result, error) {
 		AEOScore: vis.AEOScore, GEOScore: vis.GEOScore, AIVisibilityScore: vis.AIVisibilityScore,
 		OpportunityGapScore: vis.OpportunityGapScore, ScoreConfidence: vis.ScoreConfidence,
 		VisibilityReasons: vis.VisibilityReasons, VisibilitySignals: vis.VisibilitySignals,
-		AuditEngine: engine, Indexable: evidence.Indexable, MobileOK: s.viewport,
+		AuditEngine: engine, FieldData: fieldData, Indexable: evidence.Indexable, MobileOK: s.viewport,
 		HasCTA: s.tel || s.contact || s.forms > 0, HasBooking: s.booking, Title: title,
 		LatestCopyrightYear: latestYear, QualityFlags: qualityFlags, TrackingVendors: trackingVendors, SocialLinks: s.socialLinks,
-		WebsiteStatus: "weak", Note: "Lighthouse scores are used when a local Lighthouse binary is available; otherwise performance falls back to a TTFB proxy.",
+		WebsiteStatus: "weak", Note: "Lighthouse scores are used when a local Lighthouse binary is available; otherwise PageSpeed Insights is used when enabled, and performance falls back to a TTFB proxy.",
 	}
 	if !weak {
 		result.WebsiteStatus = "healthy"

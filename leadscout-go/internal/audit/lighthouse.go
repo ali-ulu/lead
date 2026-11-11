@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/ali-ulu/lead/leadscout-go/internal/providers/pagespeed"
 )
 
 // LighthouseResult holds the category scores and any rendered DOM.
@@ -77,6 +79,26 @@ func runLighthouse(url string) *LighthouseResult {
 		}
 	}
 	return parseLighthouse(stdout.Bytes())
+}
+
+// runPageSpeed is the PageSpeed Insights fallback used when no local
+// Lighthouse is available. It maps the API result into LighthouseResult so the
+// rest of the audit treats both engines the same, and returns the CrUX field
+// data separately.
+func runPageSpeed(url string) (*LighthouseResult, map[string]any) {
+	if !pagespeed.Configured() {
+		return nil, nil
+	}
+	result, err := pagespeed.Analyze(url, "mobile", 60*time.Second)
+	if err != nil {
+		return nil, nil
+	}
+	return &LighthouseResult{
+		Performance:   result.Performance,
+		Accessibility: result.Accessibility,
+		BestPractices: result.BestPractices,
+		SEO:           result.SEO,
+	}, result.FieldData
 }
 
 func parseLighthouse(raw []byte) *LighthouseResult {

@@ -334,6 +334,26 @@ def _lighthouse(url: str, timeout: int = 90) -> dict[str, Any] | None:
         return None
 
 
+def _pagespeed(url: str) -> dict[str, Any] | None:
+    """PageSpeed Insights fallback. Returns None when disabled or unavailable."""
+    from .providers import pagespeed
+
+    if not pagespeed.configured():
+        return None
+    try:
+        return pagespeed.analyze(url)
+    except Exception:
+        return None
+
+
+def _audit_engine(lighthouse: dict[str, Any] | None) -> str:
+    if lighthouse and lighthouse.get("source") == "pagespeed":
+        return "pagespeed+visibility+heuristic"
+    if lighthouse:
+        return "lighthouse+visibility+heuristic"
+    return "visibility+heuristic"
+
+
 def _lighthouse_rendered_html(audits: dict[str, Any]) -> str | None:
     """Extract the DOM Lighthouse rendered, when the report carries it.
 
@@ -409,6 +429,10 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
     try:
         _assert_public_host(final)
         lighthouse = _lighthouse(final)
+        # No local Chrome/Lighthouse: try the PageSpeed Insights API, which
+        # runs the same audit remotely and adds CrUX field data.
+        if lighthouse is None:
+            lighthouse = _pagespeed(final)
         # Prefer a real rendered DOM over the raw shell: an explicit renderer
         # wins, otherwise reuse the markup Lighthouse's headless Chrome already
         # fetched. Without this an SPA scores on an empty <div id="app">.
@@ -549,7 +573,8 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
             "visibility_reasons": visibility["visibility_reasons"],
             "visibility_signals": visibility["visibility_signals"],
             "visibility_score_note": visibility["score_note"],
-            "audit_engine": "lighthouse+visibility+heuristic" if lighthouse else "visibility+heuristic",
+            "audit_engine": _audit_engine(lighthouse),
+            "field_data": (lighthouse or {}).get("field_data"),
             "indexable": not parser.robots_noindex and not header_noindex,
             "robots_noindex": parser.robots_noindex,
             "header_noindex": header_noindex,
@@ -565,7 +590,7 @@ def audit_url(url: str, timeout: float = 12.0) -> dict[str, Any]:
             "tracking_vendors": tracking_vendors,
             "social_links": parser.social_links,
             "website_status": "weak" if weak else "healthy",
-            "note": "Lighthouse scores are used when a local Lighthouse binary is available; otherwise performance falls back to a TTFB proxy.",
+            "note": "Lighthouse scores are used when a local Lighthouse binary is available; otherwise PageSpeed Insights is used when enabled, and performance falls back to a TTFB proxy.",
         }
         if cache.enabled():
             cache.put("audit", [url], result)
