@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .audit import audit_url
+from .audit import audit_url, normalize_url
 from .crm import add_activity
 from .db import get_lead, list_leads, record_search_run, update_lead, upsert_leads
 from .enrichment import enrich_website
@@ -18,10 +18,13 @@ from .merge import merge_leads
 from . import normalize
 from .outreach import build_message
 from .providers.nominatim import geocode_area
+from .providers.photon import geocode_area as photon_geocode_area
 from .providers.osm import CATEGORY_FILTERS, _radius_bbox, search_around_detailed
 from .providers.overture import search_bbox as search_overture_bbox
 from .providers.web_search import verify_business_web
 from .providers.google_places import enrich_reputation as google_reputation
+from .providers.email_enrich import enrich_domain as waterfall_email
+from .providers.email_verify import verify_email as check_email
 
 PIPELINE_STAGES = {"new","reviewed","contacted","replied","proposal","won","lost"}
 MESSAGE_LANGUAGES = {"en","tr","ur","sd","de"}
@@ -40,6 +43,23 @@ def _intelligent(rows: list[dict[str,Any]]) -> list[dict[str,Any]]:
         lead["intelligence_reasons"]=reasons
     return rows
 
+def _geocode_area_with_fallback(city: str, country: str) -> tuple[dict[str,Any], list[str]]:
+    """Resolve a city to a bounding box, falling back to Photon.
+
+    Nominatim is the primary geocoder but is rate-limited and occasionally
+    unavailable. Photon is OSM-backed and keyless, so it keeps discovery
+    working when Nominatim fails. A hard failure from both propagates.
+    """
+    try:
+        return geocode_area(city, country), []
+    except Exception as primary_exc:
+        try:
+            area = photon_geocode_area(city, country)
+        except Exception:
+            raise primary_exc
+        return area, [f"Nominatim geocoding failed ({primary_exc}); used Photon fallback."]
+
+
 def discover_businesses(
     *, city: str, category: str, country: str="", radius_km: int=20,
     max_results: int | None=None, providers: list[str] | None=None,
@@ -54,9 +74,9 @@ def discover_businesses(
 
     wanted=set(providers or ["osm","overture"])
     unknown=sorted(wanted-{"osm","overture"})
-    area=geocode_area(city,country)
+    area, geocode_warnings = _geocode_area_with_fallback(city, country)
     provider_rows: list[list[dict[str,Any]]] = []
-    summary: dict[str,Any]={}; warnings=[]; partial=False
+    summary: dict[str,Any]={}; warnings=list(geocode_warnings); partial=False
     provider_errors: dict[str,str]={}
 
     if "osm" in wanted:
@@ -141,6 +161,11 @@ def _update_intelligence(lead_id: int, lead: dict[str,Any]) -> dict[str,Any]:
 
     return update_lead(lead_id,updates) or lead
 
+def _domain_of(url: str) -> str:
+    from urllib.parse import urlparse
+    host=(urlparse(normalize_url(url)).hostname or "").lower()
+    return host.removeprefix("www.")
+
 def enrich_lead(lead_id: int) -> dict[str,Any]:
     lead=get_lead(int(lead_id))
     if not lead: raise LookupError("Lead not found.")
@@ -149,8 +174,26 @@ def enrich_lead(lead_id: int) -> dict[str,Any]:
     result=enrich_website(lead["website"])
     socials={**(lead.get("social_links") or {}),**(result.get("social_links") or {})}
     region=str(lead.get("country") or "TR")
+
+    email=lead.get("email")
+    email_source="lead" if email else None
+    if not email:
+        site_email=next(iter(result.get("emails") or []),None)
+        if site_email:
+            email=site_email; email_source="website"
+    if not email:
+        try:
+            waterfall=waterfall_email(_domain_of(lead["website"]))
+        except Exception as exc:
+            waterfall={"found":False,"error":str(exc)}
+        result["email_enrichment"]=waterfall
+        if waterfall.get("found"):
+            email=waterfall.get("email"); email_source=waterfall.get("source")
+    if email:
+        result["email_verification"]=check_email(email,check_mx=True)
+
     updates={
-        "email":lead.get("email") or next(iter(result.get("emails") or []),None),
+        "email":email,
         "phone":normalize.normalize_phone(lead.get("phone") or next(iter(result.get("phones") or []),None),region),
         "social_links":socials,
         "social_url":lead.get("social_url") or next(iter(socials.values()),None),
@@ -159,7 +202,9 @@ def enrich_lead(lead_id: int) -> dict[str,Any]:
     updated=update_lead(int(lead_id),updates) or lead
     updated=_update_intelligence(int(lead_id),updated)
     add_activity(int(lead_id),kind="enrichment",status="complete" if result.get("complete") else "partial",
-                 metadata={"pages_scanned":result.get("pages_scanned",[]),"booking_links":result.get("booking_links",[])})
+                 metadata={"pages_scanned":result.get("pages_scanned",[]),"booking_links":result.get("booking_links",[]),
+                           "email_source":email_source,
+                           "email_status":(result.get("email_verification") or {}).get("status")})
     return {"lead":updated,"enrichment":result}
 
 def verify_lead(lead_id: int) -> dict[str,Any]:

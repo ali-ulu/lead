@@ -9,3 +9,4 @@ coverage/
 
 # OpenHands agent memory (kept out of the repo)
 .openhands/
+.replica-analysis/

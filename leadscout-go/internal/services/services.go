@@ -17,9 +17,12 @@ import (
 	"github.com/ali-ulu/lead/leadscout-go/internal/model"
 	"github.com/ali-ulu/lead/leadscout-go/internal/normalize"
 	"github.com/ali-ulu/lead/leadscout-go/internal/outreach"
+	"github.com/ali-ulu/lead/leadscout-go/internal/providers/emailenrich"
+	"github.com/ali-ulu/lead/leadscout-go/internal/providers/emailverify"
 	"github.com/ali-ulu/lead/leadscout-go/internal/providers/googleplaces"
 	"github.com/ali-ulu/lead/leadscout-go/internal/providers/nominatim"
 	"github.com/ali-ulu/lead/leadscout-go/internal/providers/osm"
+	"github.com/ali-ulu/lead/leadscout-go/internal/providers/photon"
 	"github.com/ali-ulu/lead/leadscout-go/internal/providers/websearch"
 	"github.com/ali-ulu/lead/leadscout-go/internal/visibility"
 )
@@ -83,6 +86,23 @@ type DiscoverResult struct {
 	Warnings       []string          `json:"warnings"`
 }
 
+// geocodeAreaWithFallback resolves a city, falling back to Photon.
+//
+// Nominatim is the primary geocoder but is rate-limited and occasionally
+// unavailable. Photon is OSM-backed and keyless, so it keeps discovery
+// working when Nominatim fails. A hard failure from both is returned.
+func geocodeAreaWithFallback(city, country string) (*model.Area, []string, error) {
+	area, err := nominatim.GeocodeArea(city, country, 20*time.Second)
+	if err == nil {
+		return area, nil, nil
+	}
+	fallback, photonErr := photon.GeocodeArea(city, country, 20*time.Second)
+	if photonErr != nil {
+		return nil, nil, err
+	}
+	return fallback, []string{fmt.Sprintf("Nominatim geocoding failed (%v); used Photon fallback.", err)}, nil
+}
+
 // DiscoverBusinesses runs multi-source discovery, dedupe, scoring and storage.
 func DiscoverBusinesses(city, category, country string, radiusKM int, maxResults *int, providers []string) (*DiscoverResult, error) {
 	if city == "" || category == "" {
@@ -117,14 +137,14 @@ func DiscoverBusinesses(city, category, country string, radiusKM int, maxResults
 		}
 	}
 
-	area, err := nominatim.GeocodeArea(city, country, 20*time.Second)
+	area, geocodeWarnings, err := geocodeAreaWithFallback(city, country)
 	if err != nil {
 		return nil, err
 	}
 
 	var providerRows [][]*model.Lead
 	summary := map[string]any{}
-	var warnings []string
+	warnings := append([]string{}, geocodeWarnings...)
 	partial := false
 	providerErrors := map[string]string{}
 
@@ -308,8 +328,28 @@ func EnrichLead(leadID int64) (map[string]any, error) {
 		region = "TR"
 	}
 	updates := map[string]any{"social_links": socials}
-	if lead.Email == nil && len(result.Emails) > 0 {
-		updates["email"] = result.Emails[0]
+	var email *string
+	emailSource := ""
+	if lead.Email != nil && *lead.Email != "" {
+		email = lead.Email
+		emailSource = "lead"
+	} else if len(result.Emails) > 0 {
+		email = &result.Emails[0]
+		emailSource = "website"
+		updates["email"] = *email
+	} else if domain := normalize.NormalizeDomain(*lead.Website); domain != "" {
+		// The site published no address; try the hosted waterfall.
+		if waterfall, err := emailenrich.EnrichDomain(domain, 20*time.Second); err == nil {
+			result.EmailEnrichment = waterfall
+			if waterfall.Found {
+				email = &waterfall.Email
+				emailSource = waterfall.Source
+				updates["email"] = waterfall.Email
+			}
+		}
+	}
+	if email != nil {
+		result.EmailVerification = emailverify.VerifyEmail(*email, true, 5*time.Second)
 	}
 	if lead.Phone == nil && len(result.Phones) > 0 {
 		updates["phone"] = normalize.NormalizePhone(result.Phones[0], region)
@@ -330,6 +370,7 @@ func EnrichLead(leadID int64) (map[string]any, error) {
 	updated, _ = updateIntelligence(leadID, updated)
 	_, _ = crm.AddActivity(leadID, "enrichment", "", statusFor(result.Complete), "", "", "", map[string]any{
 		"pages_scanned": result.PagesScanned, "booking_links": result.BookingLinks,
+		"email_source": emailSource, "email_status": emailStatus(result.EmailVerification),
 	})
 	return map[string]any{"lead": updated, "enrichment": result}, nil
 }
@@ -339,6 +380,14 @@ func statusFor(complete bool) string {
 		return "complete"
 	}
 	return "partial"
+}
+
+// emailStatus extracts the verification status for activity metadata.
+func emailStatus(verification any) string {
+	if v, ok := verification.(emailverify.Result); ok {
+		return v.Status
+	}
+	return ""
 }
 
 // VerifyLead cross-checks a lead and, when a website is missing, a web search.

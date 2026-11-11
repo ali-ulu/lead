@@ -35,13 +35,15 @@ var fetchLimiter = netguard.NewLimiter(netguard.DefaultFetchInterval())
 
 // Result is the enrichment outcome.
 type Result struct {
-	PagesScanned []string          `json:"pages_scanned"`
-	Emails       []string          `json:"emails"`
-	Phones       []string          `json:"phones"`
-	SocialLinks  map[string]string `json:"social_links"`
-	BookingLinks []string          `json:"booking_links"`
-	Errors       []string          `json:"errors"`
-	Complete     bool              `json:"complete"`
+	PagesScanned      []string          `json:"pages_scanned"`
+	Emails            []string          `json:"emails"`
+	Phones            []string          `json:"phones"`
+	SocialLinks       map[string]string `json:"social_links"`
+	BookingLinks      []string          `json:"booking_links"`
+	Errors            []string          `json:"errors"`
+	Complete          bool              `json:"complete"`
+	EmailEnrichment   any               `json:"email_enrichment,omitempty"`
+	EmailVerification any               `json:"email_verification,omitempty"`
 }
 
 type pageData struct {
