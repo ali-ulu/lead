@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from .audit import audit_url, normalize_url
@@ -75,6 +76,16 @@ def _within_radius(rows: list[dict[str,Any]], lat: float, lon: float, radius_km:
     return kept
 
 
+def _bbox_limit(max_results: int | None) -> int | None:
+    # A bounding box holds 4/pi more area than its inscribed circle, so asking
+    # a bbox-filtered provider for max_results rows under-fills the circle.
+    # Scale the request up; the caller trims to max_results after the circle
+    # filter.
+    if max_results is None:
+        return None
+    return math.ceil(max_results*4/math.pi)
+
+
 def discover_businesses(
     *, city: str, category: str, country: str="", radius_km: int=20,
     max_results: int | None=None, providers: list[str] | None=None,
@@ -107,9 +118,14 @@ def discover_businesses(
     if "overture" in wanted:
         south,west,north,east=_radius_bbox(area["lat"],area["lon"],radius_km)
         try:
+            # Overture filters by bounding box, but the caller wants a circle.
+            # A bbox holds ~4/pi more area than its inscribed circle, so the
+            # corner rows would otherwise exhaust the limit and push real
+            # in-radius businesses out. Over-fetch to compensate; the circle
+            # filter below trims back to the true set.
             overture=search_overture_bbox(
                 west,south,east,north,category,
-                city=area["city"],country=area["country"],limit=max_results,
+                city=area["city"],country=area["country"],limit=_bbox_limit(max_results),
             )
             provider_rows.append(overture)
             summary["overture"]={"count":len(overture),"partial":False}

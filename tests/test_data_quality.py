@@ -49,6 +49,18 @@ class RadiusFilterTests(unittest.TestCase):
         self.assertEqual(len(_within_radius(rows, *self.CENTER, 5)), 1)
 
 
+class BboxOverFetchTests(unittest.TestCase):
+    def test_bbox_limit_compensates_for_circle_ratio(self):
+        # A bounding box holds 4/pi more area than its inscribed circle, so the
+        # provider limit must be scaled up or in-radius rows get crowded out.
+        import math
+        from lead_hunter.services import _bbox_limit
+
+        self.assertEqual(_bbox_limit(None), None)
+        self.assertEqual(_bbox_limit(300), math.ceil(300 * 4 / math.pi))
+        self.assertGreater(_bbox_limit(300), 300)
+
+
 class CrossSourceTests(unittest.TestCase):
     def _lead(self, source, source_id, **extra):
         base = {
