@@ -9,6 +9,7 @@ from typing import Any
 
 from . import netguard
 from .audit import normalize_url
+from .providers.email_verify import looks_like_email
 
 USER_AGENT = netguard.USER_AGENT
 _FETCH_LIMITER = netguard.RateLimiter(netguard.default_fetch_interval())
@@ -96,7 +97,10 @@ def enrich_website(url: str, max_pages: int=4) -> dict[str,Any]:
             if any(h in low for h in FOLLOW_HINTS) and link not in seen and link not in queue:
                 queue.append(link)
 
-    clean_emails=sorted(x.strip().lower() for x in emails if "@" in x)[:20]
+    clean_emails=sorted(
+        x.strip().lower() for x in emails
+        if "@" in x and looks_like_email(x)
+    )[:20]
     clean_phones=sorted(x.strip() for x in phones if x.strip())[:20]
     return {
         "pages_scanned":pages,

@@ -52,3 +52,27 @@ func TestMXLookupPathSetsFlag(t *testing.T) {
 		t.Fatal("MXFound should be set when checkMX is true")
 	}
 }
+
+func TestAssetFilenameIsNotAnAddress(t *testing.T) {
+	// A retina image name matches the address regex because the extension reads
+	// as a TLD; it must be rejected rather than scored as a valid mailbox.
+	r := VerifyEmail("find_provider@2x-480x358.png", false, 0)
+	if r.ValidSyntax || r.Status != "invalid" || r.Score != 0 {
+		t.Errorf("asset filename should be invalid, got %+v", r)
+	}
+}
+
+func TestLooksLikeEmailFiltersAssetsKeepsReal(t *testing.T) {
+	good := []string{"owner@shop.com", "info@firma.com.tr", "a.b+c@mail.example.org"}
+	for _, e := range good {
+		if !LooksLikeEmail(e) {
+			t.Errorf("LooksLikeEmail(%q) = false, want true", e)
+		}
+	}
+	bad := []string{"sprite@2x.png", "icon@3x-480x358.jpg", "logo@2x.svg", "bundle@app.js", "font@2x.woff2"}
+	for _, e := range bad {
+		if LooksLikeEmail(e) {
+			t.Errorf("LooksLikeEmail(%q) = true, want false", e)
+		}
+	}
+}

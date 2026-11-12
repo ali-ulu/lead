@@ -12,6 +12,33 @@ import (
 
 var emailRe = regexp.MustCompile(`(?i)^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$`)
 
+// AssetExtensions are filename types that a naive regex reads as a TLD, so
+// "sprite@2x.png" or "icon@3x-480x358.jpg" look like addresses.
+var AssetExtensions = map[string]bool{
+	"png": true, "jpg": true, "jpeg": true, "gif": true, "svg": true,
+	"webp": true, "ico": true, "bmp": true, "avif": true, "tiff": true,
+	"css": true, "js": true, "mjs": true, "json": true, "xml": true,
+	"txt": true, "pdf": true, "map": true, "webmanifest": true,
+	"mp4": true, "webm": true, "mov": true, "avi": true, "mp3": true,
+	"wav": true, "ogg": true,
+	"woff": true, "woff2": true, "ttf": true, "otf": true, "eot": true,
+	"zip": true, "gz": true, "tar": true, "rar": true, "7z": true,
+}
+
+// LooksLikeEmail reports whether a regex match is an address rather than a
+// filename that merely contains an "@".
+func LooksLikeEmail(address string) bool {
+	local, domain, ok := strings.Cut(strings.ToLower(strings.TrimSpace(address)), "@")
+	if !ok || local == "" {
+		return false
+	}
+	dot := strings.LastIndex(domain, ".")
+	if dot < 0 {
+		return false
+	}
+	return !AssetExtensions[domain[dot+1:]]
+}
+
 // DisposableDomains are throwaway mailbox providers.
 var DisposableDomains = map[string]bool{
 	"mailinator.com": true, "guerrillamail.com": true, "10minutemail.com": true,
@@ -56,7 +83,7 @@ type Result struct {
 // checkMX controls the DNS lookup so callers can stay offline in tests.
 func VerifyEmail(email string, checkMX bool, timeout time.Duration) Result {
 	address := strings.ToLower(strings.TrimSpace(email))
-	if !emailRe.MatchString(address) {
+	if !emailRe.MatchString(address) || !LooksLikeEmail(address) {
 		return Result{Email: address, Status: "invalid", Reason: "Malformed address"}
 	}
 	local, domain, _ := strings.Cut(address, "@")
