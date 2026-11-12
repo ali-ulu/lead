@@ -208,6 +208,12 @@ func MergeLeads(providerSets ...[]*model.Lead) []*model.Lead {
 		if lead.SourceRefs == nil {
 			lead.SourceRefs = map[string]string{}
 		}
+		// cross_source means two independent sources agree. Derive it from the
+		// actual source count so a single provider cannot award itself that
+		// status (and the trust bonus that follows).
+		if len(lead.SourceRefs) < 2 && lead.VerificationStatus == "cross_source" {
+			lead.VerificationStatus = "unverified"
+		}
 	}
 	return merged
 }

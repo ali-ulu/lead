@@ -208,7 +208,11 @@ def search_bbox(
             "social_url": next(iter(socials.values()), None),
             "social_links": socials,
             "website_status": "unknown" if websites else "missing",
-            "verification_status": "cross_source" if websites or phones or emails or socials else "unverified",
+            # A single provider cannot cross-verify itself: having a phone or
+            # email does not mean a second source agrees. merge.py promotes to
+            # cross_source only when two independent sources match, so stay
+            # unverified here or the lead gets an unearned trust boost.
+            "verification_status": "unverified",
             "data_confidence": "high" if (row.get("confidence") or 0) >= 0.75 else "medium",
             "overture_confidence": float(row.get("confidence") or 0),
         })

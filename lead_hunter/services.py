@@ -19,7 +19,7 @@ from . import normalize
 from .outreach import build_message
 from .providers.nominatim import geocode_area
 from .providers.photon import geocode_area as photon_geocode_area
-from .providers.osm import CATEGORY_FILTERS, _radius_bbox, search_around_detailed
+from .providers.osm import CATEGORY_FILTERS, _distance_km, _radius_bbox, search_around_detailed
 from .providers.overture import search_bbox as search_overture_bbox
 from .providers.web_search import verify_business_web
 from .providers.google_places import enrich_reputation as google_reputation
@@ -58,6 +58,21 @@ def _geocode_area_with_fallback(city: str, country: str) -> tuple[dict[str,Any],
         except Exception:
             raise primary_exc
         return area, [f"Nominatim geocoding failed ({primary_exc}); used Photon fallback."]
+
+
+def _within_radius(rows: list[dict[str,Any]], lat: float, lon: float, radius_km: float) -> list[dict[str,Any]]:
+    # Providers search a bounding box, so corners reach ~1.41x the requested
+    # radius. Drop anything outside the true circle; keep rows without
+    # coordinates (a missing point is not evidence of being out of range).
+    kept=[]
+    for lead in rows:
+        try:
+            d=_distance_km(lat, lon, float(lead["latitude"]), float(lead["longitude"]))
+        except (KeyError, TypeError, ValueError):
+            kept.append(lead); continue
+        if d<=radius_km:
+            kept.append(lead)
+    return kept
 
 
 def discover_businesses(
@@ -111,6 +126,7 @@ def discover_businesses(
         raise RuntimeError("No discovery provider is enabled.")
 
     rows=_intelligent(merge_leads(*provider_rows))
+    rows=_within_radius(rows, area["lat"], area["lon"], radius_km)
     if max_results is not None: rows=rows[:max_results]
 
     degraded=partial or bool(unknown)

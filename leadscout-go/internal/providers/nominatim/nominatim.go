@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ali-ulu/lead/leadscout-go/internal/cache"
@@ -39,8 +40,26 @@ type row struct {
 	DisplayName string            `json:"display_name"`
 	Lat         string            `json:"lat"`
 	Lon         string            `json:"lon"`
+	AddressType string            `json:"addresstype"`
 	BoundingBox []string          `json:"boundingbox"`
 	Address     map[string]string `json:"address"`
+}
+
+// settlementTypes rank the address types that denote a settlement. Asking for a
+// bare city name such as "Afyonkarahisar" ranks the whole province first, so we
+// request several rows and pick the settlement instead of the province boundary
+// (which would centre the search on the province centroid).
+var settlementTypes = []string{"city", "town", "municipality", "borough", "suburb", "village", "hamlet"}
+
+func pickPlace(rows []row) row {
+	for _, wanted := range settlementTypes {
+		for _, r := range rows {
+			if strings.EqualFold(r.AddressType, wanted) {
+				return r
+			}
+		}
+	}
+	return rows[0]
 }
 
 // GeocodeArea resolves a city/area into a bounding box and coordinates.
@@ -56,7 +75,7 @@ func GeocodeArea(city, country string, timeout time.Duration) (*model.Area, erro
 	params := url.Values{}
 	params.Set("q", query)
 	params.Set("format", "jsonv2")
-	params.Set("limit", "1")
+	params.Set("limit", "5")
 	params.Set("addressdetails", "1")
 
 	fetch := func() ([]row, error) {
@@ -87,7 +106,7 @@ func GeocodeArea(city, country string, timeout time.Duration) (*model.Area, erro
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("%w: %s", ErrNotFound, query)
 	}
-	r := rows[0]
+	r := pickPlace(rows)
 	lat, _ := strconv.ParseFloat(r.Lat, 64)
 	lon, _ := strconv.ParseFloat(r.Lon, 64)
 	area := &model.Area{
