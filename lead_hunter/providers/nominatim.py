@@ -13,6 +13,19 @@ USER_AGENT = "LeadScout/4.0 (local business research tool)"
 # Nominatim's usage policy asks for at most one request per second.
 _MIN_INTERVAL = float(os.environ.get("LEADSCOUT_NOMINATIM_MIN_INTERVAL", "1.0") or 1.0)
 
+# addresstype values that denote a settlement, best first. Asking Nominatim for
+# a bare city name such as "Afyonkarahisar" ranks the whole province first, so
+# we request several rows and pick the settlement rather than the province
+# boundary (which would centre the search on the province centroid).
+_SETTLEMENT_TYPES = ("city", "town", "municipality", "borough", "suburb", "village", "hamlet")
+
+def _pick_place(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    for wanted in _SETTLEMENT_TYPES:
+        for row in rows:
+            if str(row.get("addresstype") or "").lower() == wanted:
+                return row
+    return rows[0]
+
 def geocode_area(city: str, country: str = "", timeout: int = 20) -> dict[str, Any]:
     query = ", ".join(x.strip() for x in (city, country) if x and x.strip())
     if not query:
@@ -20,7 +33,7 @@ def geocode_area(city: str, country: str = "", timeout: int = 20) -> dict[str, A
     cached = cache.get("nominatim", [query])
     if cached is not None:
         return cached
-    params = urllib.parse.urlencode({"q": query, "format": "jsonv2", "limit": 1, "addressdetails": 1})
+    params = urllib.parse.urlencode({"q": query, "format": "jsonv2", "limit": 5, "addressdetails": 1})
     req = urllib.request.Request(
         f"{NOMINATIM_URL}?{params}",
         headers={"User-Agent": USER_AGENT, "Accept-Language": "en"},
@@ -34,7 +47,7 @@ def geocode_area(city: str, country: str = "", timeout: int = 20) -> dict[str, A
     rows = ratelimit.call("nominatim", _do, min_interval=_MIN_INTERVAL)
     if not rows:
         raise LookupError(f"Location not found: {query}")
-    row = rows[0]
+    row = _pick_place(rows)
     bbox = [float(x) for x in row["boundingbox"]]
     address = row.get("address") or {}
     result = {

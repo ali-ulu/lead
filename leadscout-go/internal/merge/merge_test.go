@@ -103,3 +103,31 @@ func TestWebsiteMatchMergesAcrossDistance(t *testing.T) {
 		t.Errorf("got %d rows, want 1", len(rows))
 	}
 }
+
+func TestSingleSourceCrossSourceIsDowngraded(t *testing.T) {
+	rows := MergeLeads([]*model.Lead{{
+		Source: "overture", SourceID: "ov-1", Name: "Acme Dental", Category: "dentist",
+		Latitude: model.Float(41), Longitude: model.Float(29),
+		SocialLinks: map[string]string{}, WebsiteStatus: "missing",
+		VerificationStatus: "cross_source",
+	}})
+	if got := rows[0].VerificationStatus; got != "unverified" {
+		t.Errorf("got %q, want unverified", got)
+	}
+}
+
+func TestTwoMatchingSourcesStayCrossSource(t *testing.T) {
+	rows := MergeLeads(
+		[]*model.Lead{{Source: "osm", SourceID: "node:1", Name: "Acme Dental", Category: "dentist", Latitude: model.Float(41), Longitude: model.Float(29), Phone: model.Str("0555 111 22 33"), SocialLinks: map[string]string{}}},
+		[]*model.Lead{{Source: "overture", SourceID: "ov-1", Name: "Acme Dental", Category: "dentist", Latitude: model.Float(41.0001), Longitude: model.Float(29.0001), Phone: model.Str("+905551112233"), SocialLinks: map[string]string{}}},
+	)
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	if rows[0].VerificationStatus != "cross_source" {
+		t.Errorf("got %q, want cross_source", rows[0].VerificationStatus)
+	}
+	if len(rows[0].SourceRefs) != 2 {
+		t.Errorf("got %d refs, want 2", len(rows[0].SourceRefs))
+	}
+}

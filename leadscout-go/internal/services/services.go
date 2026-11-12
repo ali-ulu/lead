@@ -56,6 +56,23 @@ func intelligent(rows []*model.Lead) []*model.Lead {
 	return rows
 }
 
+func withinRadius(rows []*model.Lead, lat, lon, radiusKM float64) []*model.Lead {
+	// Providers search a bounding box, so corners reach ~1.41x the requested
+	// radius. Drop anything outside the true circle; keep rows without
+	// coordinates (a missing point is not evidence of being out of range).
+	kept := make([]*model.Lead, 0, len(rows))
+	for _, lead := range rows {
+		if lead.Latitude == nil || lead.Longitude == nil {
+			kept = append(kept, lead)
+			continue
+		}
+		if osm.DistanceKm(lat, lon, *lead.Latitude, *lead.Longitude) <= radiusKM {
+			kept = append(kept, lead)
+		}
+	}
+	return kept
+}
+
 func dedupe(values []string) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -187,6 +204,7 @@ func DiscoverBusinesses(city, category, country string, radiusKM int, maxResults
 	}
 
 	rows := intelligent(merge.MergeLeads(providerRows...))
+	rows = withinRadius(rows, area.Lat, area.Lon, float64(radiusKM))
 	if maxResults != nil && len(rows) > *maxResults {
 		rows = rows[:*maxResults]
 	}
