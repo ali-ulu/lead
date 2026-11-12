@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from .audit import audit_url, normalize_url
@@ -19,7 +20,7 @@ from . import normalize
 from .outreach import build_message
 from .providers.nominatim import geocode_area
 from .providers.photon import geocode_area as photon_geocode_area
-from .providers.osm import CATEGORY_FILTERS, _radius_bbox, search_around_detailed
+from .providers.osm import CATEGORY_FILTERS, _distance_km, _radius_bbox, search_around_detailed
 from .providers.overture import search_bbox as search_overture_bbox
 from .providers.web_search import verify_business_web
 from .providers.google_places import enrich_reputation as google_reputation
@@ -60,6 +61,31 @@ def _geocode_area_with_fallback(city: str, country: str) -> tuple[dict[str,Any],
         return area, [f"Nominatim geocoding failed ({primary_exc}); used Photon fallback."]
 
 
+def _within_radius(rows: list[dict[str,Any]], lat: float, lon: float, radius_km: float) -> list[dict[str,Any]]:
+    # Providers search a bounding box, so corners reach ~1.41x the requested
+    # radius. Drop anything outside the true circle; keep rows without
+    # coordinates (a missing point is not evidence of being out of range).
+    kept=[]
+    for lead in rows:
+        try:
+            d=_distance_km(lat, lon, float(lead["latitude"]), float(lead["longitude"]))
+        except (KeyError, TypeError, ValueError):
+            kept.append(lead); continue
+        if d<=radius_km:
+            kept.append(lead)
+    return kept
+
+
+def _bbox_limit(max_results: int | None) -> int | None:
+    # A bounding box holds 4/pi more area than its inscribed circle, so asking
+    # a bbox-filtered provider for max_results rows under-fills the circle.
+    # Scale the request up; the caller trims to max_results after the circle
+    # filter.
+    if max_results is None:
+        return None
+    return math.ceil(max_results*4/math.pi)
+
+
 def discover_businesses(
     *, city: str, category: str, country: str="", radius_km: int=20,
     max_results: int | None=None, providers: list[str] | None=None,
@@ -92,9 +118,14 @@ def discover_businesses(
     if "overture" in wanted:
         south,west,north,east=_radius_bbox(area["lat"],area["lon"],radius_km)
         try:
+            # Overture filters by bounding box, but the caller wants a circle.
+            # A bbox holds ~4/pi more area than its inscribed circle, so the
+            # corner rows would otherwise exhaust the limit and push real
+            # in-radius businesses out. Over-fetch to compensate; the circle
+            # filter below trims back to the true set.
             overture=search_overture_bbox(
                 west,south,east,north,category,
-                city=area["city"],country=area["country"],limit=max_results,
+                city=area["city"],country=area["country"],limit=_bbox_limit(max_results),
             )
             provider_rows.append(overture)
             summary["overture"]={"count":len(overture),"partial":False}
@@ -111,6 +142,7 @@ def discover_businesses(
         raise RuntimeError("No discovery provider is enabled.")
 
     rows=_intelligent(merge_leads(*provider_rows))
+    rows=_within_radius(rows, area["lat"], area["lon"], radius_km)
     if max_results is not None: rows=rows[:max_results]
 
     degraded=partial or bool(unknown)

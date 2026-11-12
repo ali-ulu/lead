@@ -98,4 +98,9 @@ def merge_leads(*provider_sets: list[dict[str, Any]]) -> list[dict[str, Any]]:
         lead["source"]="multi"
         lead["source_id"]=_canonical_id(lead)
         lead["source_refs"]=lead.get("source_refs") or {}
+        # cross_source means two independent sources agree. Derive it from the
+        # actual source count so a single provider cannot award itself that
+        # status (and the trust bonus that follows).
+        if len(lead["source_refs"]) < 2 and lead.get("verification_status")=="cross_source":
+            lead["verification_status"]="unverified"
     return merged
